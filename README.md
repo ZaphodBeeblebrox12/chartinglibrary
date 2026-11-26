@@ -27,7 +27,7 @@ These are sampled observations, not exchange tick-by-tick OHLC candles. The firs
 - Calculate volume increments only from consecutive valid cumulative-volume readings.
 - Do not join historical option data across expiries unless expiry identity is known.
 
-The current database schema does not persist the expiry used by each snapshot, even though the capture pipeline knows the active expiry. A backward-compatible schema/API change is therefore a required integration task for reliable expiry-specific chart history. Existing rows with unknown expiry must remain explicitly unknown; do not fabricate a backfill.
+The Options Dashboard source backend now has a backward-compatible nullable `snapshots.expiry` migration and writes the resolved expiry for new captures. Historical rows created before that migration remain `NULL` and are selectable only as **Legacy / expiry unknown**; do not fabricate a backfill.
 
 ## Repository status
 
@@ -38,7 +38,7 @@ A runnable React + TypeScript + Vite frontend is being implemented on the `feat/
 - Charts frontend: `http://localhost:5173`
 - Existing Options Dashboard API: `http://localhost:8000`
 
-The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option LTP observations come from `/api/history/{strike}`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Historical option expiry is currently unknown in legacy rows. The first chart must label this accurately until a nullable expiry field is persisted by the source backend.
+The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option expiry choices come from `/api/chart/options/expiries`; expiry-filtered LTP observations come from `/api/chart/options/history`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Legacy rows remain explicitly expiry-unknown.
 
 ## Documentation
 
