@@ -10,6 +10,8 @@ const base: FeedContext = {
   side: 'CE',
   date: '2026-11-26',
   expiry: '26NOV2026',
+  interval: '5m',
+  theme: 'light',
   onResult: () => undefined,
 }
 
