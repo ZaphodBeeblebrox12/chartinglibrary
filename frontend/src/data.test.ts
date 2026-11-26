@@ -65,7 +65,7 @@ describe('option snapshot mapping', () => {
     },
     {
       timestamp: '2026-09-11 09:16:30', option_type: 'CE', ltp: 103,
-      oi: 1080, volume: 40, volume_valid: false,
+      oi: 1080, volume: 40, volume_valid: false, source_age_sec: 1.4,
     },
     {
       timestamp: '2026-09-11 09:17:00', option_type: 'CE', ltp: 0,
@@ -86,6 +86,7 @@ describe('option snapshot mapping', () => {
     expect(result.bars[1].high).toBe(103)
     expect(result.bars[1].close).toBe(103)
     expect(result.latest?.ltp).toBe(103)
+    expect(result.latest?.sourceAgeSec).toBe(1.4)
     expect(result.latest?.iv).toBeUndefined()
   })
 
