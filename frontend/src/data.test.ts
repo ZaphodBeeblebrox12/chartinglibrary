@@ -104,6 +104,7 @@ describe('option symbol identity', () => {
       index: 'SENSEX',
       strike: 82000,
       side: 'PE',
+      expiry: 'UNKNOWN',
     })
   })
 
