@@ -4,6 +4,7 @@ import type {
   OptionHistoryPoint,
   OptionSide,
   UnderlyingCandleRow,
+  CryptoCandleRow,
 } from './api'
 
 export interface OptionMetrics {
@@ -17,6 +18,7 @@ export interface OptionMetrics {
   theta?: number
   vega?: number
   gex?: number
+  sourceAgeSec?: number
   timestamp: string
 }
 
@@ -44,6 +46,22 @@ export function istTimestampToUtcSeconds(value: string): number | undefined {
   const hasZone = /(Z|[+-]\d{2}:\d{2})$/i.test(normalized)
   const parsed = Date.parse(hasZone ? normalized : `${normalized}+05:30`)
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : undefined
+}
+
+export function mapCryptoCandles(rows: CryptoCandleRow[]): Bar[] {
+  const byTime = new Map<number, Bar>()
+  for (const row of rows) {
+    const rawTime = finiteNumber(row.time)
+    const time = rawTime === undefined ? undefined : Math.floor(rawTime > 1e12 ? rawTime / 1000 : rawTime)
+    const open = finiteNumber(row.open)
+    const high = finiteNumber(row.high)
+    const low = finiteNumber(row.low)
+    const close = finiteNumber(row.close)
+    const volume = finiteNumber(row.volume)
+    if (time === undefined || open === undefined || high === undefined || low === undefined || close === undefined) continue
+    byTime.set(time, { time, open, high, low, close, ...(volume === undefined ? {} : { volume }) })
+  }
+  return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
 export function mapUnderlyingCandles(rows: UnderlyingCandleRow[]): Bar[] {
@@ -103,12 +121,17 @@ export function mapOptionSnapshots(
     )
     .sort((a, b) => a.time - b.time)
 
+  // Snapshot rows arrive about every 30 seconds while the chart interval is
+  // 1m. Bucket observations into one-minute bars so indicators measure
+  // minutes, not half-minutes. OHLC is derived only from observed samples;
+  // it is not claimed to be the exchange's true intraminute high/low.
+  const byMinute = new Map<number, Bar>()
   let previousCumulativeVolume: number | undefined
-  const bars: Bar[] = []
   let latest: OptionMetrics | undefined
 
   for (const point of points) {
     const { row, time, ltp } = point
+    const minute = Math.floor(time / 60) * 60
     const volume = finiteNumber(row.volume)
     let volumeDelta: number | undefined
 
@@ -122,16 +145,24 @@ export function mapOptionSnapshots(
     }
 
     const oi = finiteNumber(row.oi)
-    const bar: Bar = {
-      time,
-      open: ltp,
-      high: ltp,
-      low: ltp,
-      close: ltp,
-      ...(oi === undefined ? {} : { oi }),
-      ...(volumeDelta === undefined ? {} : { volume: volumeDelta }),
+    const existing = byMinute.get(minute)
+    if (existing) {
+      existing.high = Math.max(existing.high, ltp)
+      existing.low = Math.min(existing.low, ltp)
+      existing.close = ltp
+      if (oi !== undefined) existing.oi = oi
+      if (volumeDelta !== undefined) existing.volume = (existing.volume ?? 0) + volumeDelta
+    } else {
+      byMinute.set(minute, {
+        time: minute,
+        open: ltp,
+        high: ltp,
+        low: ltp,
+        close: ltp,
+        ...(oi === undefined ? {} : { oi }),
+        ...(volumeDelta === undefined ? {} : { volume: volumeDelta }),
+      })
     }
-    bars.push(bar)
 
     latest = {
       timestamp: row.timestamp,
@@ -145,10 +176,15 @@ export function mapOptionSnapshots(
       ...(finiteNumber(row.theta) === undefined ? {} : { theta: finiteNumber(row.theta) }),
       ...(finiteNumber(row.vega) === undefined ? {} : { vega: finiteNumber(row.vega) }),
       ...(finiteNumber(row.gex) === undefined ? {} : { gex: finiteNumber(row.gex) }),
+      ...(finiteNumber(row.source_age_sec) === undefined ? {} : { sourceAgeSec: finiteNumber(row.source_age_sec) }),
     }
   }
 
-  return { bars, latest, observationCount: points.length }
+  return {
+    bars: [...byMinute.values()].sort((a, b) => a.time - b.time),
+    latest,
+    observationCount: points.length,
+  }
 }
 
 export function createFixtureBars(
@@ -192,18 +228,25 @@ export function createFixtureBars(
   })
 }
 
-export function optionSymbol(index: IndexName, strike: number, side: OptionSide): string {
-  return `${index}-${strike}-${side}`
+export function optionSymbol(
+  index: IndexName,
+  strike: number,
+  side: OptionSide,
+  expiry = 'UNKNOWN',
+): string {
+  // Expiry is part of contract identity, which also isolates drawings.
+  return `${index}-${strike}-${side}-${expiry.toUpperCase()}`
 }
 
 export function parseOptionSymbol(
   symbol: string,
-): { index: IndexName; strike: number; side: OptionSide } | undefined {
-  const match = /^(NIFTY|SENSEX)-(\d+)-(CE|PE)$/i.exec(symbol.trim())
+): { index: IndexName; strike: number; side: OptionSide; expiry?: string } | undefined {
+  const match = /^(NIFTY|SENSEX)-(\d+)-(CE|PE)(?:-([A-Z0-9]+))?$/i.exec(symbol.trim())
   if (!match) return undefined
   return {
     index: match[1].toUpperCase() as IndexName,
     strike: Number(match[2]),
     side: match[3].toUpperCase() as OptionSide,
+    ...(match[4] ? { expiry: match[4].toUpperCase() } : {}),
   }
 }

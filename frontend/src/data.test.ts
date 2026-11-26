@@ -3,6 +3,7 @@ import type { OptionHistoryPoint } from './api'
 import {
   createFixtureBars,
   istTimestampToUtcSeconds,
+  mapCryptoCandles,
   mapOptionSnapshots,
   mapUnderlyingCandles,
   optionSymbol,
@@ -64,7 +65,7 @@ describe('option snapshot mapping', () => {
     },
     {
       timestamp: '2026-09-11 09:16:30', option_type: 'CE', ltp: 103,
-      oi: 1080, volume: 40, volume_valid: false,
+      oi: 1080, volume: 40, volume_valid: false, source_age_sec: 1.4,
     },
     {
       timestamp: '2026-09-11 09:17:00', option_type: 'CE', ltp: 0,
@@ -72,23 +73,27 @@ describe('option snapshot mapping', () => {
     },
   ]
 
-  it('keeps sampled LTP as flat line points and only maps the requested side', () => {
+  it('buckets 30-second LTP observations into one-minute sampled OHLC bars', () => {
     const result = mapOptionSnapshots(rows, 'CE')
     expect(result.observationCount).toBe(4)
-    expect(result.bars).toHaveLength(4)
+    expect(result.bars).toHaveLength(2)
+    expect(result.bars[0].time).toBe(istTimestampToUtcSeconds('2026-09-11 09:15:00'))
     expect(result.bars[0].open).toBe(100)
-    expect(result.bars[0].high).toBe(100)
-    expect(result.bars[1].close).toBe(101)
+    expect(result.bars[0].high).toBe(101)
+    expect(result.bars[0].low).toBe(100)
+    expect(result.bars[0].close).toBe(101)
+    expect(result.bars[1].open).toBe(102)
+    expect(result.bars[1].high).toBe(103)
+    expect(result.bars[1].close).toBe(103)
     expect(result.latest?.ltp).toBe(103)
+    expect(result.latest?.sourceAgeSec).toBe(1.4)
     expect(result.latest?.iv).toBeUndefined()
   })
 
   it('derives cumulative volume deltas only across valid non-decreasing samples', () => {
     const result = mapOptionSnapshots(rows, 'CE')
-    expect(result.bars[0].volume).toBeUndefined()
-    expect(result.bars[1].volume).toBe(125)
-    expect(result.bars[2].volume).toBeUndefined()
-    expect(result.bars[3].volume).toBeUndefined()
+    expect(result.bars[0].volume).toBe(125)
+    expect(result.bars[1].volume).toBeUndefined()
   })
 })
 
@@ -99,12 +104,34 @@ describe('option symbol identity', () => {
       index: 'SENSEX',
       strike: 82000,
       side: 'PE',
+      expiry: 'UNKNOWN',
     })
   })
 
   it('does not parse incomplete or non-option symbols', () => {
     expect(parseOptionSymbol('NIFTY')).toBeUndefined()
     expect(parseOptionSymbol('BANKNIFTY-50000-CE')).toBeUndefined()
+  })
+
+  it('keeps expiry in the option instrument identity', () => {
+    const symbol = optionSymbol('NIFTY', 25000, 'CE', '26NOV2026')
+    expect(symbol).toBe('NIFTY-25000-CE-26NOV2026')
+    expect(parseOptionSymbol(symbol)).toEqual({
+      index: 'NIFTY', strike: 25000, side: 'CE', expiry: '26NOV2026',
+    })
+  })
+})
+
+describe('crypto candle mapping', () => {
+  it('maps exchange millisecond timestamps, volume and chronological order', () => {
+    const bars = mapCryptoCandles([
+      { time: 1795651260000, open: 90500, high: 91000, low: 90000, close: 90750, volume: 4.2 },
+      { time: 1795651200000, open: 90000, high: 90500, low: 89500, close: 90500, volume: 5.1 },
+    ])
+    expect(bars).toHaveLength(2)
+    expect(bars[0].time).toBe(1795651200)
+    expect(bars[0].volume).toBe(5.1)
+    expect(bars[1].close).toBe(90750)
   })
 })
 

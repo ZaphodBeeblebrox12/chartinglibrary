@@ -1,5 +1,15 @@
 export type IndexName = 'NIFTY' | 'SENSEX'
 export type OptionSide = 'CE' | 'PE'
+export type CryptoExchange = 'BINANCE' | 'OKX'
+
+export interface CryptoCandleRow {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
 
 export interface UnderlyingCandleRow {
   symbol?: string
@@ -31,6 +41,20 @@ export interface OptionHistoryPoint {
   theta?: number | null
   vega?: number | null
   gex?: number | null
+}
+
+export interface OptionHistoryResponse {
+  points: OptionHistoryPoint[]
+  quality?: {
+    gaps_detected?: boolean
+    last_timestamp?: string | null
+    missing_expiry_rows?: number
+    migration_missing?: boolean
+  }
+  sampling?: {
+    expected_seconds?: number
+    bar_semantics?: string
+  }
 }
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -81,31 +105,16 @@ export async function fetchUnderlyingCandles(
 export async function fetchStrikesForDate(
   index: IndexName,
   date: string,
+  expiry: string,
   signal?: AbortSignal,
 ): Promise<number[]> {
-  const params = new URLSearchParams({ index, date })
-  const snapshotPayload = await getJson<{ timestamps?: string[] }>(
-    `/api/snapshots?${params.toString()}`,
+  const params = new URLSearchParams({ index, date, expiry })
+  const payload = await getJson<{ strikes?: number[] }>(
+    `/api/chart/options/strikes?${params.toString()}`,
     signal,
   )
-  const timestamps = Array.isArray(snapshotPayload.timestamps)
-    ? snapshotPayload.timestamps
-    : []
-
-  const latestTimestamp = timestamps[timestamps.length - 1]
-  if (!latestTimestamp) return []
-
-  const strikeParams = new URLSearchParams({
-    index,
-    timestamp: latestTimestamp,
-  })
-  const strikePayload = await getJson<{ strikes?: number[] }>(
-    `/api/strikes?${strikeParams.toString()}`,
-    signal,
-  )
-
-  return Array.isArray(strikePayload.strikes)
-    ? strikePayload.strikes.map(Number).filter(Number.isFinite).sort((a, b) => a - b)
+  return Array.isArray(payload.strikes)
+    ? payload.strikes.map(Number).filter(Number.isFinite).sort((a, b) => a - b)
     : []
 }
 
@@ -141,7 +150,7 @@ export async function fetchOptionHistory(
   expiry: string,
   date: string,
   signal?: AbortSignal,
-): Promise<OptionHistoryPoint[]> {
+): Promise<OptionHistoryResponse> {
   const params = new URLSearchParams({
     index,
     strike: String(strike),
@@ -149,9 +158,26 @@ export async function fetchOptionHistory(
     expiry,
     date,
   })
-  const payload = await getJson<{ points?: OptionHistoryPoint[] }>(
+  const payload = await getJson<OptionHistoryResponse>(
     `/api/chart/options/history?${params.toString()}`,
     signal,
   )
-  return Array.isArray(payload.points) ? payload.points : []
+  return {
+    ...payload,
+    points: Array.isArray(payload.points) ? payload.points : [],
+  }
+}
+
+export async function fetchCryptoCandles(
+  exchange: CryptoExchange,
+  interval: string,
+  date: string,
+  signal?: AbortSignal,
+): Promise<CryptoCandleRow[]> {
+  const params = new URLSearchParams({ exchange, interval, date })
+  const payload = await getJson<{ candles?: CryptoCandleRow[] }>(
+    `/api/chart/crypto/candles?${params.toString()}`,
+    signal,
+  )
+  return Array.isArray(payload.candles) ? payload.candles : []
 }
