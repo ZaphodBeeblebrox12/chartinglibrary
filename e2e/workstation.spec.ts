@@ -35,7 +35,7 @@ test('switches between BTC spot venues without mixing the selector state', async
   await expect(exchange).toHaveValue('BINANCE')
   await exchange.selectOption('OKX')
   await expect(exchange).toHaveValue('OKX')
-  await expect(page.getByText('OKX SPOT')).toBeVisible()
+  await expect(page.locator('.chart-heading h1 small')).toHaveText('OKX')
 })
 
 test('switches chart theme and index without losing the application shell', async ({ page }) => {
