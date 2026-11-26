@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -23,19 +23,26 @@ jobs:
         with:
           node-version: 26.13.1
 
-      - name: Generate npm lockfile for initial bootstrap
-        run: npm install --package-lock-only --ignore-scripts
+      - name: Bootstrap and commit lockfile once when missing on a PR
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BRANCH: ${{ github.head_ref }}
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts
+            cp package-lock.json /tmp/tradethesis-package-lock.json
+            git fetch origin "$PR_BRANCH"
+            git checkout -B "$PR_BRANCH" "origin/$PR_BRANCH"
+            cp /tmp/tradethesis-package-lock.json package-lock.json
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: add npm workspace lockfile"
+            git push origin "$PR_BRANCH"
+          fi
 
       - name: Install locked dependencies
         run: npm ci
-
-      - name: Upload generated lockfile for repository bootstrap
-        uses: actions/upload-artifact@v4
-        with:
-          name: tradethesis-charts-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 2
 
       - name: Type-check, unit test and build
         run: npm run check
