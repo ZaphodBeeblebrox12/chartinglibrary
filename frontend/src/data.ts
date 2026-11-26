@@ -18,6 +18,7 @@ export interface OptionMetrics {
   theta?: number
   vega?: number
   gex?: number
+  sourceAgeSec?: number
   timestamp: string
 }
 
@@ -175,6 +176,7 @@ export function mapOptionSnapshots(
       ...(finiteNumber(row.theta) === undefined ? {} : { theta: finiteNumber(row.theta) }),
       ...(finiteNumber(row.vega) === undefined ? {} : { vega: finiteNumber(row.vega) }),
       ...(finiteNumber(row.gex) === undefined ? {} : { gex: finiteNumber(row.gex) }),
+      ...(finiteNumber(row.source_age_sec) === undefined ? {} : { sourceAgeSec: finiteNumber(row.source_age_sec) }),
     }
   }
 
