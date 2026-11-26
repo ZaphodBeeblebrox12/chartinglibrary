@@ -7,7 +7,7 @@ import type {
 import type { CryptoExchange } from './api'
 import type { RealtimeStatus } from './realtime'
 
-const BINANCE_INTERVALS = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d'])
+const BINANCE_INTERVALS = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'])
 const OKX_CHANNELS: Record<string, string> = {
   '1m': 'candle1m',
   '3m': 'candle3m',
