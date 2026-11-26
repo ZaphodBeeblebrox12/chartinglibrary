@@ -161,8 +161,8 @@ export class TradeThesisDataFeed implements DataFeed {
       }
 
       if (isOption) {
-        const points = await fetchOptionHistory(index, strike, side, selectedExpiry, selectedDate, request.signal)
-        const mapped = mapOptionSnapshots(points, side)
+        const history = await fetchOptionHistory(index, strike, side, selectedExpiry, selectedDate, request.signal)
+        const mapped = mapOptionSnapshots(history.points, side)
         // The backend endpoint is date-scoped. Return the full selected
         // session so older saved dates are not hidden by the widget's
         // default lookback window anchored to today's clock.
@@ -172,7 +172,13 @@ export class TradeThesisDataFeed implements DataFeed {
           connection: 'connected',
           label: bars.length ? 'Saved option snapshots' : 'No saved option observations',
           detail: bars.length
-            ? '1m bars from ~30-second LTP samples · OHLC reflects observed samples, not tick-perfect exchange highs/lows · ' + (selectedExpiry === 'UNKNOWN' ? 'legacy expiry unknown' : 'expiry ' + selectedExpiry)
+            ? [
+                '1m bars from ~30-second LTP samples · OHLC reflects observed samples only',
+                selectedExpiry === 'UNKNOWN' ? 'legacy expiry unknown' : 'expiry ' + selectedExpiry,
+                mapped.latest?.sourceAgeSec === undefined ? '' : `capture source age ${mapped.latest.sourceAgeSec.toFixed(1)}s`,
+                history.quality?.gaps_detected ? 'capture gaps over 90s detected' : '',
+                history.quality?.missing_expiry_rows ? `${history.quality.missing_expiry_rows} legacy snapshots have unknown expiry` : '',
+              ].filter(Boolean).join(' · ')
             : `No ${index} ${strike} ${side} observations were found for ${selectedDate}.`,
           barCount: bars.length,
           latest: mapped.latest,
