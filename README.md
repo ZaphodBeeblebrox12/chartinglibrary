@@ -53,6 +53,19 @@ To point the Vite proxy at a different local backend, create `frontend/.env` fro
 
 Run `npm run check` for TypeScript, unit tests and the production build. The frontend is historical-only in this first release; demo fixtures are displayed only when the backend cannot be reached and are explicitly labelled.
 
+## Bitcoin spot markets
+
+TradeThesis Charts also offers BTC/USDT spot candles from **Binance** and **OKX**.
+
+- Historical OHLCV is fetched through the Options Dashboard backend from each exchange's public REST market-data API.
+- The current UTC session also subscribes directly in the browser to that exchange's public candlestick WebSocket stream.
+- No exchange API key or trading permission is required for these public market-data endpoints.
+- Binance BTCUSDT and OKX BTC-USDT remain separate instruments: prices and volumes are not mixed or normalized across venues.
+- Historical date selection uses UTC for Bitcoin. Selecting an older date disables the live subscription and displays historical candles only.
+- Spot volume is the exchange's reported base-asset volume; it is not directly comparable with index cash-feed volume or derivative contract volume.
+
+The backend route is `GET /api/chart/crypto/candles?exchange=BINANCE|OKX&interval=5m&date=YYYY-MM-DD`.
+
 ## Documentation
 
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
