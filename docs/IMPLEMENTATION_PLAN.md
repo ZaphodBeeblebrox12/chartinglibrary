@@ -79,41 +79,43 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 ### Phase 0 — Data contract and compatibility audit
 
-- Freeze the current repository as a separate standalone project.
-- Confirm the local Options Dashboard API address, payloads, authentication/CORS behavior and database path.
-- Reuse `candles_1m` and `/api/scanner/candles` for NIFTY/SENSEX underlying OHLC; do not recreate this pipeline.
-- Implement the nullable expiry persistence migration in the Options Dashboard backend for option snapshots.
-- Add a read-only option-history API that accepts index, expiry, strike, CE/PE and date range.
-- Keep legacy option rows with unknown expiry separate.
-- Verify the existing WebSocket payload and decide whether it can supply live updates; otherwise update on successful snapshot/API refresh without creating a new broker feed.
-- Add tests for expiry persistence, legacy rows, data gaps, duplicate timestamps and volume validity.
+<badge>Implemented on `feat/charts-expiry-history-api`; CI pending</badge>
 
-**Exit criteria:** underlying OHLC is loaded from the existing candle store, while option premium history is queried with explicit expiry identity and documented sampling quality.
+- Reuse `candles_1m` and `/api/scanner/candles` for NIFTY/SENSEX underlying OHLC; no duplicate candle builder.
+- Add nullable `snapshots.expiry` persistence from the already-resolved `expiry_key`.
+- Add `GET /api/chart/options/expiries` and `GET /api/chart/options/history` for expiry-aware date-scoped history.
+- Keep legacy rows at `expiry IS NULL`; select them only via the explicit `UNKNOWN` series.
+- Add database migration and snapshot-writer tests. Broader endpoint/API checks still need CI validation.
+- The existing WebSocket payload has not yet been approved as a stable chart-stream contract; the chart app therefore remains historical-only until a realtime provider is implemented.
+
+**Remaining before phase exit:** run the Options Dashboard backend test suite in CI and verify existing production DB migration on a backup/copy before restarting the live backend.
 
 ### Phase 1 — Chart engine prototype
 
-- Create a React + TypeScript + Vite application.
-- Pin a reviewed OpenAlgo Charts release; do not follow an unpinned latest version.
-- Integrate the full OpenAlgo widget, drawing tier and indicator tier.
-- Implement light/dark toggle and remember the choice locally.
-- Start with deterministic fixture data.
-- Add lifecycle cleanup for chart creation/destruction and React development Strict Mode.
-- Confirm resize, fullscreen, keyboard shortcuts and toolbar behavior.
+<badge>Frontend implemented; build and browser checks pending</badge>
 
-**Exit criteria:** a local standalone chart with sample data, drawing rail, indicator picker, working theme toggle and no dependency on the Options Dashboard UI.
+- React + TypeScript + Vite application scaffolded.
+- OpenAlgo Charts pinned to 2.7.5; widget, drawing rail and indicator registry imported.
+- Light/dark theme toggle and widget state persistence configured.
+- Deterministic fixture data is used only when the local API is unavailable and is labelled as demo data.
+- Chart lifecycle cleanup is implemented for React Strict Mode.
+- Resize, fullscreen, keyboard shortcuts and chart interactions still require CI/browser verification.
+
+**Remaining before phase exit:** pass TypeScript, unit, production build and manual browser checks.
 
 ### Phase 2 — Historical database adapter
 
-- Implement a TradeThesis `DataFeed` adapter for OpenAlgo Charts.
-- Add index and contract selectors for NIFTY/SENSEX, expiry, strike and CE/PE.
-- Load underlying NIFTY/SENSEX tick-built OHLC directly from the existing `/api/scanner/candles` and/or a small read-only 1m history endpoint.
-- Load option LTP observations from the existing option snapshot history, filtered by known expiry once expiry persistence is added.
-- Add line view for option premiums and explicitly labelled snapshot-derived candlestick view as an optional chart type.
-- Display the capture cadence and data-quality warnings.
-- Plot OI, IV, Greeks and valid volume deltas in separate indicator panes.
-- Support date navigation using available database dates.
+<badge>Core history adapter implemented; analytics panes pending</badge>
 
-**Exit criteria:** the user can select an exact saved NIFTY or SENSEX expiry/strike/side and see historical observations from the dashboard database.
+- Implement `TradeThesisDataFeed` using the OpenAlgo `DataFeed` interface.
+- Add NIFTY/SENSEX, underlying/call/put, strike, expiry and session-date selectors.
+- Load existing tick-built underlying candles through `/api/scanner/candles`.
+- Load exact-expiry option LTP samples through `/api/chart/options/history`; legacy `UNKNOWN` is isolated.
+- Use a line chart for option premiums and show the approximately 30-second capture cadence.
+- Map valid cumulative volume into deltas without inventing values across invalid/reset samples.
+- Show latest OI/IV/Greeks in a compact metrics strip; dedicated synchronized indicator panes and advanced date-range pagination remain future work.
+
+**Remaining before phase exit:** pass CI and verify data against the user's local Options Dashboard database for both indices, both sides and legacy/exact-expiry sessions.
 
 ### Future realtime provider requirement
 
