@@ -11,7 +11,7 @@ The goal is a TradingView-style charting experience powered by **OpenAlgo Charts
 - **Frontend:** React + TypeScript + Vite
 - **Appearance:** Light and dark themes
 - **Development and use:** Local-first
-- **Initial markets:** NIFTY and SENSEX
+- **Initial markets:** NIFTY, SENSEX and BTC/USDT spot (Binance / OKX)
 - **Historical source:** Existing Options Dashboard SQLite database, accessed through its FastAPI backend
 - **Broker connectivity:** No separate Angel One login or WebSocket connection in this application
 
@@ -51,7 +51,7 @@ Requirements: Node.js 26 LTS (see `.nvmrc`) and the existing Options Dashboard b
 
 To point the Vite proxy at a different local backend, create `frontend/.env` from `frontend/.env.example` and set `VITE_OPTIONS_API_TARGET`. No broker key or Angel One credential belongs in the frontend.
 
-Run `npm run check` for TypeScript, unit tests and the production build. The frontend is historical-only in this first release; demo fixtures are displayed only when the backend cannot be reached and are explicitly labelled.
+Run `npm ci` to install the exact committed dependency tree, then `npm run check` for TypeScript, unit tests and the production build. Run `npm run test:e2e` for the Playwright Chromium browser smoke tests. NIFTY/SENSEX use historical local database candles; BTC spot loads exchange history and subscribes to the selected venue's public live candle stream for the current UTC day. Demo fixtures are shown only for the index/option chart when the local backend cannot be reached, and are explicitly labelled.
 
 ## Bitcoin spot markets
 
