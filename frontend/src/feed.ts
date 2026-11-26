@@ -53,7 +53,7 @@ export function feedScopeKey(context: FeedContext): string {
 
 function dateFromScope(value: string | undefined, fallback: string): string {
   const candidate = value?.split('|', 1)[0]
-  return candidate && /^\\d{4}-\\d{2}-\\d{2}$/.test(candidate) ? candidate : fallback
+  return candidate && /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : fallback
 }
 
 type Interval = '5m' | '15m' | '30m' | '1h'
