@@ -234,6 +234,8 @@ export class TradeThesisDataFeed implements DataFeed {
     const indexChoices: SymbolMatch[] = [
       { symbol: 'NIFTY', exchange: 'NSE', name: 'NIFTY 50', assetClass: 'Index' },
       { symbol: 'SENSEX', exchange: 'BSE', name: 'BSE SENSEX', assetClass: 'Index' },
+      { symbol: 'BTCUSDT', exchange: 'BINANCE', name: 'BTC/USDT · Binance Spot', assetClass: 'Crypto' },
+      { symbol: 'BTC-USDT', exchange: 'OKX', name: 'BTC/USDT · OKX Spot', assetClass: 'Crypto' },
     ]
     const optionChoices: SymbolMatch[] = [
       {
