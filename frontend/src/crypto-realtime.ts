@@ -72,6 +72,10 @@ export function subscribeCryptoBars(
   let stopped = false
   let socket: WebSocket | null = null
   let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined
+  let stableTimer: ReturnType<typeof setTimeout> | undefined
+  let lastMessageAt = 0
+  let lastPingAt = 0
   let retryCount = 0
 
   const connect = (): void => {
@@ -79,7 +83,8 @@ export function subscribeCryptoBars(
     status(onStatus, retryCount === 0 ? 'connecting' : 'reconnecting')
     const url = exchange === 'BINANCE'
       ? `wss://data-stream.binance.vision/ws/btcusdt@kline_${interval}`
-      : 'wss://ws.okx.com:8443/ws/v5/business'
+      // OKX retired public port 8443 in October 2026; use default TLS port 443.
+      : 'wss://ws.okx.com/ws/v5/business'
 
     try {
       socket = new WebSocket(url)
@@ -89,20 +94,48 @@ export function subscribeCryptoBars(
     }
 
     socket.onopen = () => {
-      retryCount = 0
+      if (stableTimer !== undefined) clearTimeout(stableTimer)
+      stableTimer = setTimeout(() => {
+        retryCount = 0
+        stableTimer = undefined
+      }, 30_000)
       if (exchange === 'OKX') {
+        lastMessageAt = Date.now()
+        lastPingAt = 0
         socket?.send(JSON.stringify({
           op: 'subscribe',
           args: [{ channel, instId: 'BTC-USDT' }],
         }))
+        if (heartbeatTimer !== undefined) clearInterval(heartbeatTimer)
+        heartbeatTimer = setInterval(() => {
+          if (stopped || !socket || socket.readyState !== WebSocket.OPEN) return
+          const now = Date.now()
+          if (lastPingAt && now - lastPingAt >= 10_000) {
+            socket.close()
+            return
+          }
+          if (!lastPingAt && now - lastMessageAt >= 20_000) {
+            lastPingAt = now
+            socket.send('ping')
+          }
+        }, 5_000)
       }
     }
 
     socket.onmessage = (event) => {
       if (typeof event.data !== 'string') return
-      if (exchange === 'OKX' && event.data === 'ping') {
-        socket?.send('pong')
-        return
+      if (exchange === 'OKX') {
+        lastMessageAt = Date.now()
+        if (event.data === 'ping') {
+          socket?.send('pong')
+          return
+        }
+        if (event.data === 'pong') {
+          lastPingAt = 0
+          return
+        }
+        // Any exchange response proves the connection is alive.
+        lastPingAt = 0
       }
       try {
         const payload = JSON.parse(event.data) as Record<string, unknown>
@@ -151,6 +184,10 @@ export function subscribeCryptoBars(
       status(onStatus, 'reconnecting', 'Exchange WebSocket connection error')
     }
     socket.onclose = () => {
+      if (heartbeatTimer !== undefined) clearInterval(heartbeatTimer)
+      heartbeatTimer = undefined
+      if (stableTimer !== undefined) clearTimeout(stableTimer)
+      stableTimer = undefined
       if (!stopped) scheduleReconnect('Exchange WebSocket disconnected')
     }
   }
@@ -170,7 +207,11 @@ export function subscribeCryptoBars(
   return () => {
     stopped = true
     if (retryTimer !== undefined) clearTimeout(retryTimer)
+    if (heartbeatTimer !== undefined) clearInterval(heartbeatTimer)
+    if (stableTimer !== undefined) clearTimeout(stableTimer)
     retryTimer = undefined
+    heartbeatTimer = undefined
+    stableTimer = undefined
     const current = socket
     socket = null
     if (current) {
