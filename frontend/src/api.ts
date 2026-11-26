@@ -43,6 +43,20 @@ export interface OptionHistoryPoint {
   gex?: number | null
 }
 
+export interface OptionHistoryResponse {
+  points: OptionHistoryPoint[]
+  quality?: {
+    gaps_detected?: boolean
+    last_timestamp?: string | null
+    missing_expiry_rows?: number
+    migration_missing?: boolean
+  }
+  sampling?: {
+    expected_seconds?: number
+    bar_semantics?: string
+  }
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',
@@ -136,7 +150,7 @@ export async function fetchOptionHistory(
   expiry: string,
   date: string,
   signal?: AbortSignal,
-): Promise<OptionHistoryPoint[]> {
+): Promise<OptionHistoryResponse> {
   const params = new URLSearchParams({
     index,
     strike: String(strike),
@@ -144,22 +158,12 @@ export async function fetchOptionHistory(
     expiry,
     date,
   })
-  const payload = await getJson<{ points?: OptionHistoryPoint[] }>(
+  const payload = await getJson<OptionHistoryResponse>(
     `/api/chart/options/history?${params.toString()}`,
     signal,
   )
-  return Array.isArray(payload.points) ? payload.points : []
-}
-
-export async function fetchCryptoCandles(
-  exchange: CryptoExchange,
-  interval: string,
-  date: string,
-  signal?: AbortSignal,
-): Promise<CryptoCandleRow[]> {
-  const params = new URLSearchParams({ exchange, interval, date })
-  const payload = await getJson<{ candles?: CryptoCandleRow[] }>(
-    `/api/chart/crypto/candles?${params.toString()}`, signal,
-  )
-  return Array.isArray(payload.candles) ? payload.candles : []
+  return {
+    ...payload,
+    points: Array.isArray(payload.points) ? payload.points : [],
+  }
 }
