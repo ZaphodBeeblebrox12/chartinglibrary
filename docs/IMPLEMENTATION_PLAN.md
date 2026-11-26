@@ -28,9 +28,10 @@ Relevant existing functionality:
 - `GET /api/snapshots` and `GET /api/snapshot/{timestamp}` support snapshot navigation/replay.
 - `GET /api/available-dates` exposes dates containing saved data.
 - `/ws` is the existing live-state WebSocket; its exact event cadence and payload should be verified before using it for chart updates.
-- `candles_1m` is a separate one-minute OHLC store for symbols whose cash ticks are passed through the candle builder. It is not the option-premium candle store.
+- **Underlying OHLC already exists:** `candles_1m` stores genuine tick-built one-minute CASH/spot candles. In `streamer_integration.py`, the NIFTY/SENSEX spot-tick handler calls `candle_feed.on_tick(self.index_name, message)`. The separate stock streamer also forwards CASH ticks for STOCK instruments. `candle_builder.py` constructs OHLC from incoming ticks using the Angel exchange timestamp when valid. The existing `GET /api/scanner/candles?symbol=NIFTY|SENSEX&tf=5m|15m|30m|1H&date=YYYY-MM-DD` derives higher timeframes from those saved 1m rows.
+- **Option premium OHLC does not currently exist:** the option tick handlers update the in-memory option state, and the snapshot engine persists LTP/OI/IV/Greeks approximately every 30 seconds in `option_snapshots`. Those option ticks are not passed to `CandleBuilder`; there is no per-option `candles_1m` table.
 
-The option-chain snapshots are captured on an approximately 30-second cadence. The chart app should read this stored history; it should not create a second broker feed.
+Therefore, TradeThesis Charts can use the existing true tick-built OHLC for NIFTY and SENSEX underlying charts immediately. Selected CE/PE premium charts initially use the stored snapshot time series (line view by default); snapshot-derived candles, if offered, must be labelled as sampled bars. No second broker feed is needed.
 
 ## 3. Critical data-model issue: expiry identity
 
@@ -43,7 +44,7 @@ The capture pipeline resolves the active expiry into `expiry_key` (`ek`) before 
 
 ### Required forward-compatible fix
 
-Before treating historical records as exact contract history:
+Before treating historical option records as exact contract history:
 
 1. Add a nullable `expiry` column to `snapshots`.
 2. Put the resolved expiry key into the captured snapshot payload.
@@ -80,13 +81,14 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 - Freeze the current repository as a separate standalone project.
 - Confirm the local Options Dashboard API address, payloads, authentication/CORS behavior and database path.
-- Implement the nullable expiry persistence migration in the Options Dashboard backend.
-- Add a new read-only chart-history API that accepts index, expiry, strike, CE/PE, date range and requested interval.
-- Keep legacy rows with unknown expiry separate.
+- Reuse `candles_1m` and `/api/scanner/candles` for NIFTY/SENSEX underlying OHLC; do not recreate this pipeline.
+- Implement the nullable expiry persistence migration in the Options Dashboard backend for option snapshots.
+- Add a read-only option-history API that accepts index, expiry, strike, CE/PE and date range.
+- Keep legacy option rows with unknown expiry separate.
 - Verify the existing WebSocket payload and decide whether it can supply live updates; otherwise update on successful snapshot/API refresh without creating a new broker feed.
 - Add tests for expiry persistence, legacy rows, data gaps, duplicate timestamps and volume validity.
 
-**Exit criteria:** NIFTY and SENSEX historical option observations can be requested without expiry mixing, and all fields have documented provenance.
+**Exit criteria:** underlying OHLC is loaded from the existing candle store, while option premium history is queried with explicit expiry identity and documented sampling quality.
 
 ### Phase 1 — Chart engine prototype
 
@@ -104,8 +106,9 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 - Implement a TradeThesis `DataFeed` adapter for OpenAlgo Charts.
 - Add index and contract selectors for NIFTY/SENSEX, expiry, strike and CE/PE.
-- Load LTP observations and sampled bars from the new read-only chart-history API.
-- Add line and snapshot-derived candlestick views.
+- Load underlying NIFTY/SENSEX tick-built OHLC directly from the existing `/api/scanner/candles` and/or a small read-only 1m history endpoint.
+- Load option LTP observations from the existing option snapshot history, filtered by known expiry once expiry persistence is added.
+- Add line view for option premiums and explicitly labelled snapshot-derived candlestick view as an optional chart type.
 - Display the capture cadence and data-quality warnings.
 - Plot OI, IV, Greeks and valid volume deltas in separate indicator panes.
 - Support date navigation using available database dates.
@@ -189,7 +192,7 @@ Do not copy the Options Dashboard backend into this repository. The first local 
 
 1. **Isolation:** starting/stopping Charts does not start/stop or alter the Options Dashboard.
 2. **Data correctness:** exact expiry/strike/side identity; unknown legacy expiry never silently merged.
-3. **Data provenance:** sampled option observations are clearly distinguished from true exchange OHLC.
+3. **Data provenance:** underlying candles are identified as tick-built OHLC; option premiums from snapshots are identified as sampled observations or snapshot-derived bars.
 4. **No duplicate brokerage feed:** Charts does not log into Angel One or open a new broker WebSocket.
 5. **Resilience:** stale/missing samples create gaps/status, not fabricated flat prices.
 6. **Persistence:** saved chart drawings/layouts restore after restart.
