@@ -27,18 +27,31 @@ These are sampled observations, not exchange tick-by-tick OHLC candles. The firs
 - Calculate volume increments only from consecutive valid cumulative-volume readings.
 - Do not join historical option data across expiries unless expiry identity is known.
 
-The current database schema does not persist the expiry used by each snapshot, even though the capture pipeline knows the active expiry. A backward-compatible schema/API change is therefore a required integration task for reliable expiry-specific chart history. Existing rows with unknown expiry must remain explicitly unknown; do not fabricate a backfill.
+The Options Dashboard source backend now has a backward-compatible nullable `snapshots.expiry` migration and writes the resolved expiry for new captures. Historical rows created before that migration remain `NULL` and are selectable only as **Legacy / expiry unknown**; do not fabricate a backfill.
 
 ## Repository status
 
-This repository is being established from an empty GitHub repository. The initial commits document the architecture and delivery plan. The runnable frontend and chart integration will be added in the first implementation milestone.
+A runnable React + TypeScript + Vite frontend is being implemented on the `feat/tradethesis-charts-app` branch. The initial workstation uses the OpenAlgo Charts 2.7.5 widget, supports both themes, and includes a custom feed for the existing local API. Run the verification workflow before treating the branch as release-ready.
 
 ## Local development target
 
 - Charts frontend: `http://localhost:5173`
 - Existing Options Dashboard API: `http://localhost:8000`
 
-The chart frontend should use a Vite development proxy to the existing FastAPI service where practical. The Options Dashboard remains a separate application and its existing UI must not be changed by this project.
+The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option expiry choices come from `/api/chart/options/expiries`; expiry-filtered LTP observations come from `/api/chart/options/history`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Legacy rows remain explicitly expiry-unknown.
+
+## Local quick start
+
+Requirements: Node.js 26 LTS (see `.nvmrc`) and the existing Options Dashboard backend.
+
+1. Start the Options Dashboard FastAPI backend on `http://127.0.0.1:8000` using its normal development command.
+2. From this repository root, run `npm install`.
+3. Run `npm run dev`.
+4. Open `http://127.0.0.1:5173`.
+
+To point the Vite proxy at a different local backend, create `frontend/.env` from `frontend/.env.example` and set `VITE_OPTIONS_API_TARGET`. No broker key or Angel One credential belongs in the frontend.
+
+Run `npm run check` for TypeScript, unit tests and the production build. The frontend is historical-only in this first release; demo fixtures are displayed only when the backend cannot be reached and are explicitly labelled.
 
 ## Documentation
 

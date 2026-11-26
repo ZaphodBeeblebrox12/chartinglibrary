@@ -29,9 +29,9 @@ Do not duplicate Angel One login, SmartAPI subscriptions, tick ingestion or Gree
 
 ## 2. Existing data source
 
-The current snapshot writer captures an index state and the active option chain. The resolved expiry key is available in the capture path, but the current SQL writer does not persist it. A nullable parent `snapshots.expiry` field must be added before exact historical contract selection can be guaranteed.
+The snapshot writer now persists the already-resolved expiry key into nullable `snapshots.expiry` in the same parent snapshot row. The migration is backward-compatible; old rows remain `NULL` and must never be assigned today's expiry retroactively.
 
-Current snapshot cadence is approximately 30 seconds. The primary option history path joins `snapshots` with `option_snapshots` by `snapshot_id`.
+Current snapshot cadence is approximately 30 seconds. The chart API `GET /api/chart/options/expiries` lists session expiries; `GET /api/chart/options/history` selects one exact expiry, strike and side (or the separate `UNKNOWN` legacy series). Queries use parent snapshot IDs and the `idx_snapshots_expiry_index_ts` index.
 
 ### Existing underlying OHLC — reuse it
 
@@ -45,13 +45,13 @@ The Options Dashboard already builds tick-based one-minute OHLC for underlying C
 This is genuine tick-built underlying OHLC, not option-premium OHLC. Reuse it for NIFTY/SENSEX underlying charts. The CASH/spot candles currently have null volume because the tick mode used here does not carry LTQ.
 
 
-Existing endpoint `GET /api/history/{strike}?date=YYYY-MM-DD&index=NIFTY|SENSEX` returns both CE and PE observations for one strike and date. It includes timestamp, OI, OI change, volume-validity metadata, LTP, IV, Delta, Gamma, Theta, Vega and GEX. A new chart endpoint should add explicit expiry and date-range filters rather than making the frontend fetch and filter unbounded history.
+The legacy endpoint `GET /api/history/{strike}` remains unchanged for the Options Dashboard UI. TradeThesis Charts uses the new expiry-aware chart endpoints so it does not combine different option contracts.
 
 ## 3. Frontend modules
 
 - **App shell:** top bar, instrument selector, theme switch, workspace chrome.
 - **Chart host:** owns OpenAlgo widget lifecycle; mount once after container sizing, destroy on unmount.
-- **TradeThesisDataFeed:** adapts local HTTP history and existing live notifications into OpenAlgo's DataFeed contract.
+- **TradeThesisDataFeed:** adapts local expiry-aware historical HTTP endpoints into OpenAlgo's DataFeed contract; optionally delegates `subscribeBars` to an independent `RealtimeProvider`.
 - **Instrument resolver:** NIFTY/SENSEX, expiry, strike and CE/PE. The instrument identity must be explicit and stable.
 - **Series adapters:** LTP observations, snapshot-derived bars, valid volume deltas, OI, IV and Greeks.
 - **Workspace persistence:** saved drawings, indicators, chart layouts and selected theme.
@@ -74,6 +74,28 @@ Initial mode:
 - If not, use a conservative API refresh aligned to the snapshot writer cadence until a backend notification contract is added.
 - Charts never start another Angel One WebSocket.
 
+## 5A. Independent historical and realtime providers
+
+The application deliberately separates the source of historical bars from the source of live updates:
+
+- `TradeThesisDataFeed.getBars()` reads saved history from the existing Options Dashboard FastAPI endpoints.
+- An optional `RealtimeProvider` implements the OpenAlgo `subscribeBars()` contract. It can be attached later without changing the React shell, chart widget, symbol selectors or historical adapter.
+- The initial app does not configure a realtime provider. It runs in historical mode and must not imply that data is streaming.
+- A future realtime provider may consume the Options Dashboard's existing server-side streamer, or a dedicated Angel One gateway if that becomes the chosen operating model. Its output contract remains the same.
+
+For an Angel One integration, prefer a backend adapter that owns authentication, subscriptions, reconnects and tick-to-bar aggregation. The browser must not receive Angel One API keys, JWTs, feed tokens or order credentials. Do not open another SmartAPI WebSocket if the existing backend session can supply the required instruments. If the user later explicitly chooses an independent Angel One session, document its subscription limits and ownership before enabling it.
+
+The realtime adapter must:
+- Map the provider's exchange timestamps to UTC epoch seconds before chart delivery.
+- Resolve exact instrument identity, including expiry for options.
+- Build the chart interval from ticks (or consume a verified server-side candle stream), rather than treating every tick as a completed bar.
+- Seed live aggregation from the last historical bar when history and live data share a candle interval.
+- Suppress duplicate/out-of-order events and never invent prices across disconnections.
+- Report connecting/live/reconnecting/disconnected states and request an authoritative history resync after a gap.
+- Unsubscribe cleanly when symbol, interval or chart changes.
+
+Historical data remains the source of truth for backfill. Realtime data extends the right edge of that history; it does not replace or rewrite older observations.
+
 ## 6. Time and bar semantics
 
 All stored snapshot timestamps use the backend's local timestamp convention. The adapter must parse them explicitly as Asia/Kolkata time and convert to the chart library's expected time representation without accidental browser-local or UTC shifts.
@@ -88,4 +110,4 @@ Prefer LTP line view as the default historical representation. Candlestick view 
 - Do not expose API keys, JWTs, broker credentials or account actions in the browser.
 - Do not execute or submit trades from the initial app.
 - Charts should work with fixture data when the API is unavailable.
-- No backend schema is altered by this frontend repository; the expiry persistence migration is made in the Options Dashboard repository separately, tested and backward-compatible.
+- The expiry migration and chart-history API live in the Options Dashboard repository; they are backward-compatible and tested separately from this frontend.

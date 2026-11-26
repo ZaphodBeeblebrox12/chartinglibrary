@@ -31,7 +31,7 @@ Never treat `underlying + strike + option_type` as a complete long-term identity
 - `max_pain`
 - `gamma_flip)
 
-Required forward field: nullable `expiry`, written from the already-resolved capture `expiry_key`.
+Nullable `expiry`, added by a backward-compatible migration and written from the already-resolved capture `expiry_key`. Existing rows remain `NULL`.
 
 ### Child `option_snapshots`
 
@@ -57,13 +57,16 @@ The existing `GET /api/scanner/candles?symbol=NIFTY|SENSEX&tf=5m|15m|30m|1H&date
 
 **Scope boundary:** this table is for underlying/cash candles. It does not store individual option contract candles.
 
-## 4. Proposed option chart-history API
+## 4. Implemented option chart-history API
 
-Proposed read-only endpoint in the Options Dashboard backend:
+The Options Dashboard backend exposes two read-only endpoints:
 
-`GET /api/chart/options/history?index=NIFTY&expiry=11SEP2026&strike=25000&option_type=CE&from=2026-09-01&to=2026-09-11`
+- `GET /api/chart/options/expiries?index=NIFTY&date=2026-11-26` lists expiries actually persisted for that index/session and separately reports the count of snapshots whose expiry is unknown.
+- `GET /api/chart/options/history?index=NIFTY&expiry=26NOV2026&strike=25000&option_type=CE&date=2026-11-26` returns one date, exact expiry, strike and side. Use `expiry=UNKNOWN` to query legacy rows whose parent snapshot has `expiry IS NULL`.
 
-Response shape (illustrative contract; finalize against implementation):
+The history response contains `instrument`, `sampling`, `points` and `quality`. `instrument.expiry_known` is false for the legacy selector. Each point inherits expiry and spot from its parent snapshot. The query first selects parent snapshot IDs using `(index_name, expiry, timestamp)`, then reads only the selected strike and option type. SQLite work runs through `asyncio.to_thread`.
+
+The response shape is:
 
 ```json
 {
@@ -108,7 +111,7 @@ The endpoint should be paginated or date-bounded, use indexed queries, run block
 
 ## 5. Legacy history behavior
 
-Before expiry persistence is added, historical rows have no reliable expiry identity in the database. They may be displayed as **Legacy / expiry unknown** with a date-scoped selection, but:
+Historical rows created before expiry persistence have no reliable expiry identity in the database. They may be displayed as **Legacy / expiry unknown** with a date-scoped selection, but:
 - do not infer their expiry from the current Scrip Master;
 - do not combine history across expiry transition dates;
 - do not describe the series as one exact option contract;
