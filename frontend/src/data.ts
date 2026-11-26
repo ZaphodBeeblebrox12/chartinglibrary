@@ -4,6 +4,7 @@ import type {
   OptionHistoryPoint,
   OptionSide,
   UnderlyingCandleRow,
+  CryptoCandleRow,
 } from './api'
 
 export interface OptionMetrics {
@@ -44,6 +45,22 @@ export function istTimestampToUtcSeconds(value: string): number | undefined {
   const hasZone = /(Z|[+-]\d{2}:\d{2})$/i.test(normalized)
   const parsed = Date.parse(hasZone ? normalized : `${normalized}+05:30`)
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : undefined
+}
+
+export function mapCryptoCandles(rows: CryptoCandleRow[]): Bar[] {
+  const byTime = new Map<number, Bar>()
+  for (const row of rows) {
+    const rawTime = finiteNumber(row.time)
+    const time = rawTime === undefined ? undefined : Math.floor(rawTime > 1e12 ? rawTime / 1000 : rawTime)
+    const open = finiteNumber(row.open)
+    const high = finiteNumber(row.high)
+    const low = finiteNumber(row.low)
+    const close = finiteNumber(row.close)
+    const volume = finiteNumber(row.volume)
+    if (time === undefined || open === undefined || high === undefined || low === undefined || close === undefined) continue
+    byTime.set(time, { time, open, high, low, close, ...(volume === undefined ? {} : { volume }) })
+  }
+  return [...byTime.values()].sort((a, b) => a.time - b.time)
 }
 
 export function mapUnderlyingCandles(rows: UnderlyingCandleRow[]): Bar[] {
@@ -192,18 +209,25 @@ export function createFixtureBars(
   })
 }
 
-export function optionSymbol(index: IndexName, strike: number, side: OptionSide): string {
-  return `${index}-${strike}-${side}`
+export function optionSymbol(
+  index: IndexName,
+  strike: number,
+  side: OptionSide,
+  expiry = 'UNKNOWN',
+): string {
+  // Expiry is part of contract identity, which also isolates drawings.
+  return `${index}-${strike}-${side}-${expiry.toUpperCase()}`
 }
 
 export function parseOptionSymbol(
   symbol: string,
-): { index: IndexName; strike: number; side: OptionSide } | undefined {
-  const match = /^(NIFTY|SENSEX)-(\d+)-(CE|PE)$/i.exec(symbol.trim())
+): { index: IndexName; strike: number; side: OptionSide; expiry?: string } | undefined {
+  const match = /^(NIFTY|SENSEX)-(\d+)-(CE|PE)(?:-([A-Z0-9]+))?$/i.exec(symbol.trim())
   if (!match) return undefined
   return {
     index: match[1].toUpperCase() as IndexName,
     strike: Number(match[2]),
     side: match[3].toUpperCase() as OptionSide,
+    ...(match[4] ? { expiry: match[4].toUpperCase() } : {}),
   }
 }
