@@ -79,7 +79,7 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 ### Phase 0 — Data contract and compatibility audit
 
-<badge>Implemented on `feat/charts-expiry-history-api`; CI pending</badge>
+**Status:** Implemented on `feat/charts-expiry-history-api`; CI pending
 
 - Reuse `candles_1m` and `/api/scanner/candles` for NIFTY/SENSEX underlying OHLC; no duplicate candle builder.
 - Add nullable `snapshots.expiry` persistence from the already-resolved `expiry_key`.
@@ -92,7 +92,7 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 ### Phase 1 — Chart engine prototype
 
-<badge>Frontend implemented; build and browser checks pending</badge>
+**Status:** Frontend implemented; build and browser checks pending
 
 - React + TypeScript + Vite application scaffolded.
 - OpenAlgo Charts pinned to 2.7.5; widget, drawing rail and indicator registry imported.
@@ -105,7 +105,7 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 ### Phase 2 — Historical database adapter
 
-<badge>Core history adapter implemented; analytics panes pending</badge>
+**Status:** Core history adapter implemented; analytics panes pending
 
 - Implement `TradeThesisDataFeed` using the OpenAlgo `DataFeed` interface.
 - Add NIFTY/SENSEX, underlying/call/put, strike, expiry and session-date selectors.
