@@ -247,6 +247,8 @@ export default function App() {
     widgetRef.current = widget
     const off = [
       widget.on('symbol', ({ symbol, exchange }) => {
+        setFeed(undefined)
+        setRealtimeStatus({ state: 'disconnected' })
         const contract = parseOptionSymbol(symbol)
         const venue = exchange.toUpperCase()
         if (contract) {
@@ -266,7 +268,10 @@ export default function App() {
           setIndex(symbol)
         }
       }),
-      widget.on('interval', ({ interval: next }) => setInterval(next)),
+      widget.on('interval', ({ interval: next }) => {
+        setFeed(undefined)
+        setInterval(next)
+      }),
       widget.on('theme', ({ theme: next }) => setTheme(next)),
       widget.on('data', ({ bars, error }) => {
         if (error) setMessage(error)
@@ -450,7 +455,10 @@ export default function App() {
           <label className="toolbar-group">
             <span className="toolbar-caption">STRIKE</span>
             <select className="control-select strike-select" value={strike} disabled={!strikes.length}
-              onChange={(event) => setStrike(Number(event.target.value))}>
+              onChange={(event) => {
+                setFeed(undefined)
+                setStrike(Number(event.target.value))
+              }}>
               {strikes.length ? strikes.map((value) => <option key={value} value={value}>{fmtInt(value)}</option>)
                 : <option value={strike}>{fmtInt(strike)}</option>}
             </select>
@@ -458,7 +466,10 @@ export default function App() {
           <label className="toolbar-group">
             <span className="toolbar-caption">EXPIRY</span>
             <select className="control-select expiry-select" value={expiry}
-              onChange={(event) => setExpiry(event.target.value)}>
+              onChange={(event) => {
+                setFeed(undefined)
+                setExpiry(event.target.value)
+              }}>
               {expiryChoices.map((value) => (
                 <option key={value} value={value}>{value === 'UNKNOWN' ? 'Legacy / unknown' : value}</option>
               ))}
@@ -468,7 +479,11 @@ export default function App() {
         <span className="toolbar-spacer" />
         <label className="toolbar-group">
           <span className="toolbar-caption">{market === 'BTC' ? 'DATE (UTC)' : 'SESSION'}</span>
-          <input className="control-input" type="date" value={date} max={today} onChange={(event) => setDate(event.target.value)} />
+          <input className="control-input" type="date" value={date} max={today} onChange={(event) => {
+            setFeed(undefined)
+            setRealtimeStatus({ state: 'disconnected' })
+            setDate(event.target.value)
+          }} />
         </label>
         <button className="today-button" disabled={date === today} onClick={() => setDate(today)}>Today</button>
       </section>
