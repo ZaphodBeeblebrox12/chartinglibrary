@@ -45,7 +45,19 @@ Required forward field: nullable `expiry`, written from the already-resolved cap
 
 The option row inherits expiry from its parent snapshot. This preserves the existing one-row-per-snapshot/strike/side structure.
 
-## 3. Proposed chart-history API
+## 3. Existing underlying OHLC contract
+
+The current Options Dashboard already persists one-minute OHLC for underlying CASH/spot ticks:
+
+`candles_1m(symbol, ts_minute, open, high, low, close, volume, tick_count, finalized_at)`
+
+The NIFTY/SENSEX spot-tick handlers call the shared `CandleBuilder`; configured STOCK-kind cash streams do the same. The builder aggregates actual incoming ticks and prefers the Angel exchange timestamp when valid. For the index CASH/spot tick mode, `volume` is currently NULL because those ticks do not carry LTQ.
+
+The existing `GET /api/scanner/candles?symbol=NIFTY|SENSEX&tf=5m|15m|30m|1H&date=YYYY-MM-DD` endpoint derives higher timeframes from stored 1m candles. TradeThesis Charts should reuse this source for NIFTY/SENSEX underlying charts. Add a small read-only 1m history endpoint only if the existing scanner endpoint's time-range contract proves insufficient.
+
+**Scope boundary:** this table is for underlying/cash candles. It does not store individual option contract candles.
+
+## 4. Proposed option chart-history API
 
 Proposed read-only endpoint in the Options Dashboard backend:
 
@@ -94,7 +106,7 @@ Response shape (illustrative contract; finalize against implementation):
 
 The endpoint should be paginated or date-bounded, use indexed queries, run blocking SQLite reads off the FastAPI event loop, and return chronological points. The response must not include credentials or broker tokens.
 
-## 4. Legacy history behavior
+## 5. Legacy history behavior
 
 Before expiry persistence is added, historical rows have no reliable expiry identity in the database. They may be displayed as **Legacy / expiry unknown** with a date-scoped selection, but:
 - do not infer their expiry from the current Scrip Master;
@@ -102,7 +114,7 @@ Before expiry persistence is added, historical rows have no reliable expiry iden
 - do not describe the series as one exact option contract;
 - do not backfill unless a separately archived, authoritative expiry record exists.
 
-## 5. LTP and candle mapping
+## 6. LTP and candle mapping
 
 The source has sampled LTP, not trade-by-trade ticks.
 
@@ -113,7 +125,7 @@ The source has sampled LTP, not trade-by-trade ticks.
 - Empty buckets stay empty; do not forward-fill synthetic bars.
 - Keep the source interval and aggregation semantics available to the UI.
 
-## 6. Volume
+## 7. Volume
 
 Option-chain volume is cumulative traded volume for the session, not per-snapshot volume. A bar-volume delta may be calculated only when:
 - current and previous rows are marked valid;
@@ -123,17 +135,17 @@ Option-chain volume is cumulative traded volume for the session, not per-snapsho
 
 On a reset, invalid sample or missing previous reading, do not invent a zero. Expose null/unknown and allow the UI to show a gap.
 
-## 7. OI, IV and Greeks
+## 8. OI, IV and Greeks
 
 OI, IV, Delta, Gamma, Theta, Vega and GEX are observations over time. Keep them as separate sampled series / lower panes. Do not run them through OHLC aggregation as if they were traded prices.
 
 Null, stale or invalid values remain null; do not draw fabricated continuity through missing readings unless a user explicitly enables a visual interpolation mode.
 
-## 8. Time handling
+## 9. Time handling
 
 The existing timestamps are formatted as local wall-clock strings. Interpret them as Asia/Kolkata for the initial NSE/BSE implementation, then convert to the chart library's time representation carefully. Add tests around session open, date rollover, expiry day and browser timezone differing from IST.
 
-## 9. Status metadata
+## 10. Status metadata
 
 Every chart data response should expose:
 - source (database snapshots vs another source);
