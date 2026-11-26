@@ -3,6 +3,7 @@ import type { OptionHistoryPoint } from './api'
 import {
   createFixtureBars,
   istTimestampToUtcSeconds,
+  mapCryptoCandles,
   mapOptionSnapshots,
   mapUnderlyingCandles,
   optionSymbol,
@@ -105,6 +106,27 @@ describe('option symbol identity', () => {
   it('does not parse incomplete or non-option symbols', () => {
     expect(parseOptionSymbol('NIFTY')).toBeUndefined()
     expect(parseOptionSymbol('BANKNIFTY-50000-CE')).toBeUndefined()
+  })
+
+  it('keeps expiry in the option instrument identity', () => {
+    const symbol = optionSymbol('NIFTY', 25000, 'CE', '26NOV2026')
+    expect(symbol).toBe('NIFTY-25000-CE-26NOV2026')
+    expect(parseOptionSymbol(symbol)).toEqual({
+      index: 'NIFTY', strike: 25000, side: 'CE', expiry: '26NOV2026',
+    })
+  })
+})
+
+describe('crypto candle mapping', () => {
+  it('maps exchange millisecond timestamps, volume and chronological order', () => {
+    const bars = mapCryptoCandles([
+      { time: 1795651260000, open: 90500, high: 91000, low: 90000, close: 90750, volume: 4.2 },
+      { time: 1795651200000, open: 90000, high: 90500, low: 89500, close: 90500, volume: 5.1 },
+    ])
+    expect(bars).toHaveLength(2)
+    expect(bars[0].time).toBe(1795651200)
+    expect(bars[0].volume).toBe(5.1)
+    expect(bars[1].close).toBe(90750)
   })
 })
 
