@@ -91,31 +91,16 @@ export async function fetchUnderlyingCandles(
 export async function fetchStrikesForDate(
   index: IndexName,
   date: string,
+  expiry: string,
   signal?: AbortSignal,
 ): Promise<number[]> {
-  const params = new URLSearchParams({ index, date })
-  const snapshotPayload = await getJson<{ timestamps?: string[] }>(
-    `/api/snapshots?${params.toString()}`,
+  const params = new URLSearchParams({ index, date, expiry })
+  const payload = await getJson<{ strikes?: number[] }>(
+    `/api/chart/options/strikes?${params.toString()}`,
     signal,
   )
-  const timestamps = Array.isArray(snapshotPayload.timestamps)
-    ? snapshotPayload.timestamps
-    : []
-
-  const latestTimestamp = timestamps[timestamps.length - 1]
-  if (!latestTimestamp) return []
-
-  const strikeParams = new URLSearchParams({
-    index,
-    timestamp: latestTimestamp,
-  })
-  const strikePayload = await getJson<{ strikes?: number[] }>(
-    `/api/strikes?${strikeParams.toString()}`,
-    signal,
-  )
-
-  return Array.isArray(strikePayload.strikes)
-    ? strikePayload.strikes.map(Number).filter(Number.isFinite).sort((a, b) => a - b)
+  return Array.isArray(payload.strikes)
+    ? payload.strikes.map(Number).filter(Number.isFinite).sort((a, b) => a - b)
     : []
 }
 
