@@ -38,6 +38,8 @@ export interface FeedContext {
   side: 'CE' | 'PE'
   date: string
   expiry: string
+  interval: string
+  theme: 'light' | 'dark'
   onResult: (result: FeedResult) => void
   onLiveStatus?: (status: RealtimeStatus) => void
 }
