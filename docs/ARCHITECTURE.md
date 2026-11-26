@@ -74,6 +74,28 @@ Initial mode:
 - If not, use a conservative API refresh aligned to the snapshot writer cadence until a backend notification contract is added.
 - Charts never start another Angel One WebSocket.
 
+## 5A. Independent historical and realtime providers
+
+The application deliberately separates the source of historical bars from the source of live updates:
+
+- `TradeThesisDataFeed.getBars()` reads saved history from the existing Options Dashboard FastAPI endpoints.
+- An optional `RealtimeProvider` implements the OpenAlgo `subscribeBars()` contract. It can be attached later without changing the React shell, chart widget, symbol selectors or historical adapter.
+- The initial app does not configure a realtime provider. It runs in historical mode and must not imply that data is streaming.
+- A future realtime provider may consume the Options Dashboard's existing server-side streamer, or a dedicated Angel One gateway if that becomes the chosen operating model. Its output contract remains the same.
+
+For an Angel One integration, prefer a backend adapter that owns authentication, subscriptions, reconnects and tick-to-bar aggregation. The browser must not receive Angel One API keys, JWTs, feed tokens or order credentials. Do not open another SmartAPI WebSocket if the existing backend session can supply the required instruments. If the user later explicitly chooses an independent Angel One session, document its subscription limits and ownership before enabling it.
+
+The realtime adapter must:
+- Map the provider's exchange timestamps to UTC epoch seconds before chart delivery.
+- Resolve exact instrument identity, including expiry for options.
+- Build the chart interval from ticks (or consume a verified server-side candle stream), rather than treating every tick as a completed bar.
+- Seed live aggregation from the last historical bar when history and live data share a candle interval.
+- Suppress duplicate/out-of-order events and never invent prices across disconnections.
+- Report connecting/live/reconnecting/disconnected states and request an authoritative history resync after a gap.
+- Unsubscribe cleanly when symbol, interval or chart changes.
+
+Historical data remains the source of truth for backfill. Realtime data extends the right edge of that history; it does not replace or rewrite older observations.
+
 ## 6. Time and bar semantics
 
 All stored snapshot timestamps use the backend's local timestamp convention. The adapter must parse them explicitly as Asia/Kolkata time and convert to the chart library's expected time representation without accidental browser-local or UTC shifts.
