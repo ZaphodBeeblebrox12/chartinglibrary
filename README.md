@@ -31,14 +31,14 @@ The current database schema does not persist the expiry used by each snapshot, e
 
 ## Repository status
 
-This repository is being established from an empty GitHub repository. The initial commits document the architecture and delivery plan. The runnable frontend and chart integration will be added in the first implementation milestone.
+A runnable React + TypeScript + Vite frontend is being implemented on the `feat/tradethesis-charts-app` branch. The initial workstation uses the OpenAlgo Charts 2.7.5 widget, supports both themes, and includes a custom feed for the existing local API. Run the verification workflow before treating the branch as release-ready.
 
 ## Local development target
 
 - Charts frontend: `http://localhost:5173`
 - Existing Options Dashboard API: `http://localhost:8000`
 
-The chart frontend should use a Vite development proxy to the existing FastAPI service where practical. The Options Dashboard remains a separate application and its existing UI must not be changed by this project.
+The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option LTP observations come from `/api/history/{strike}`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Historical option expiry is currently unknown in legacy rows. The first chart must label this accurately until a nullable expiry field is persisted by the source backend.
 
 ## Documentation
 
