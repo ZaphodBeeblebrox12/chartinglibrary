@@ -40,7 +40,7 @@ test('switches between BTC spot venues without mixing the selector state', async
 
 test('switches chart theme and index without losing the application shell', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Dark' }).click()
+  await page.locator('button.theme-toggle').click()
   await expect(page.locator('main.app-shell')).toHaveAttribute('data-theme', 'dark')
   await page.getByRole('button', { name: 'SENSEX' }).click()
   await expect(page.getByRole('heading', { name: /SENSEX/ })).toBeVisible()
