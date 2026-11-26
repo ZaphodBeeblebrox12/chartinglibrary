@@ -33,6 +33,18 @@ The current snapshot writer captures an index state and the active option chain.
 
 Current snapshot cadence is approximately 30 seconds. The primary option history path joins `snapshots` with `option_snapshots` by `snapshot_id`.
 
+### Existing underlying OHLC — reuse it
+
+The Options Dashboard already builds tick-based one-minute OHLC for underlying CASH/spot instruments:
+
+- `streamer_integration.py` sends NIFTY/SENSEX spot ticks to `candle_feed.on_tick(index_name, message)`.
+- `stock_streamer.py` sends CASH ticks for STOCK-kind instruments to the same builder.
+- `candle_builder.py` constructs one-minute OHLC using tick prices and the exchange timestamp where valid, then persists to `candles_1m`.
+- `main.py` exposes `GET /api/scanner/candles?symbol=...&tf=5m|15m|30m|1H&date=...`, deriving higher timeframes from stored 1m candles.
+
+This is genuine tick-built underlying OHLC, not option-premium OHLC. Reuse it for NIFTY/SENSEX underlying charts. The CASH/spot candles currently have null volume because the tick mode used here does not carry LTQ.
+
+
 Existing endpoint `GET /api/history/{strike}?date=YYYY-MM-DD&index=NIFTY|SENSEX` returns both CE and PE observations for one strike and date. It includes timestamp, OI, OI change, volume-validity metadata, LTP, IV, Delta, Gamma, Theta, Vega and GEX. A new chart endpoint should add explicit expiry and date-range filters rather than making the frontend fetch and filter unbounded history.
 
 ## 3. Frontend modules
@@ -66,7 +78,7 @@ Initial mode:
 
 All stored snapshot timestamps use the backend's local timestamp convention. The adapter must parse them explicitly as Asia/Kolkata time and convert to the chart library's expected time representation without accidental browser-local or UTC shifts.
 
-Option premium history is a sequence of sampled LTP observations. A snapshot-derived bar uses only observations that actually exist in the interval. Missing intervals remain gaps. The bar's high/low are observed-sample extrema, not guaranteed market extremes. This provenance must be visible in the UI.
+Option premium history is a sequence of approximately 30-second sampled LTP observations. A snapshot-derived bar uses only observations that actually exist in the interval. Missing intervals remain gaps. The bar's high/low are observed-sample extrema, not guaranteed market extremes. This provenance must be visible in the UI.
 
 Prefer LTP line view as the default historical representation. Candlestick view can be offered as a snapshot-derived display with an explanatory label.
 
