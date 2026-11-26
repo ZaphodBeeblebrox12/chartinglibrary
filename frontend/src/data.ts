@@ -157,9 +157,13 @@ export function createFixtureBars(
   date: string,
   optionMode = false,
 ): Bar[] {
-  const intervalSeconds = optionMode
-    ? 30
-    : ({ '5m': 300, '15m': 900, '30m': 1800, '1h': 3600 }[interval] ?? 300)
+  const intervalSecondsByCode: Record<string, number> = {
+    '5m': 300,
+    '15m': 900,
+    '30m': 1800,
+    '1h': 3600,
+  }
+  const intervalSeconds = optionMode ? 30 : (intervalSecondsByCode[interval] ?? 300)
   const sessionStart = istTimestampToUtcSeconds(`${date} 09:15:00`)
   if (sessionStart === undefined) return []
 
