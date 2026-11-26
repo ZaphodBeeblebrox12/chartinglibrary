@@ -31,25 +31,25 @@ The Options Dashboard source backend now has a backward-compatible nullable `sna
 
 ## Repository status
 
-A runnable React + TypeScript + Vite frontend is being implemented on the `feat/tradethesis-charts-app` branch. The initial workstation uses the OpenAlgo Charts 2.7.5 widget, supports both themes, and includes a custom feed for the existing local API. Run the verification workflow before treating the branch as release-ready.
+The `main` branch contains the runnable React + TypeScript + Vite workstation. It uses the OpenAlgo Charts 2.7.5 widget, supports both themes, and includes historical adapters for the Options Dashboard plus public Binance and OKX BTC/USDT spot adapters. Automated checks cover TypeScript, unit tests, the production build and Playwright Chromium browser tests.
 
 ## Local development target
 
 - Charts frontend: `http://localhost:5173`
 - Existing Options Dashboard API: `http://localhost:8000`
 
-The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option expiry choices come from `/api/chart/options/expiries`; expiry-filtered LTP observations come from `/api/chart/options/history`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Legacy rows remain explicitly expiry-unknown.
+The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option expiry choices come from `/api/chart/options/expiries`; expiry-filtered LTP observations come from `/api/chart/options/history`; and the expiry-specific strike selector uses `/api/chart/options/strikes`. Public BTC spot history is served by `/api/chart/crypto/candles`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Legacy option rows remain explicitly expiry-unknown.
 
 ## Local quick start
 
-Requirements: Node.js 26 LTS (see `.nvmrc`) and the existing Options Dashboard backend.
+Requirements: Node.js 26.13.1 (see `.nvmrc`) and the existing Options Dashboard backend. Node.js 24 or newer is required.
 
 1. Start the Options Dashboard FastAPI backend on `http://127.0.0.1:8000` using its normal development command.
-2. From this repository root, run `npm install`.
+2. From this repository root, run `npm ci` to install the committed lockfile exactly.
 3. Run `npm run dev`.
 4. Open `http://127.0.0.1:5173`.
 
-To point the Vite proxy at a different local backend, create `frontend/.env` from `frontend/.env.example` and set `VITE_OPTIONS_API_TARGET`. No broker key or Angel One credential belongs in the frontend.
+To point the Vite proxy at a different local backend, create `frontend/.env` from `frontend/.env.example` and set `VITE_OPTIONS_API_TARGET`. To use a shared SQLite file stored outside the Options Dashboard backend folder, set `TRADETHESIS_DB_PATH` in `Options-Dashboard/backend/.env` to its absolute path (use forward slashes on Windows). Do not place broker credentials in the chart frontend.
 
 Run `npm ci` to install the exact committed dependency tree, then `npm run check` for TypeScript, unit tests and the production build. Run `npm run test:e2e` for the Playwright Chromium browser smoke tests. NIFTY/SENSEX use historical local database candles; BTC spot loads exchange history and subscribes to the selected venue's public live candle stream for the current UTC day. Demo fixtures are shown only for the index/option chart when the local backend cannot be reached, and are explicitly labelled.
 
