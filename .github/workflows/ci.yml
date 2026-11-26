@@ -23,8 +23,19 @@ jobs:
         with:
           node-version: 26.13.1
 
-      - name: Install dependencies
-        run: npm install
+      - name: Generate npm lockfile for initial bootstrap
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Upload generated lockfile for repository bootstrap
+        uses: actions/upload-artifact@v4
+        with:
+          name: tradethesis-charts-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 2
 
       - name: Type-check, unit test and build
         run: npm run check
