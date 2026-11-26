@@ -40,6 +40,19 @@ A runnable React + TypeScript + Vite frontend is being implemented on the `feat/
 
 The chart frontend uses a Vite development proxy to the existing FastAPI service. Historical index candles come from `/api/scanner/candles`; option expiry choices come from `/api/chart/options/expiries`; expiry-filtered LTP observations come from `/api/chart/options/history`. The Options Dashboard remains a separate application and its existing UI is not changed by this project. Legacy rows remain explicitly expiry-unknown.
 
+## Local quick start
+
+Requirements: Node.js 26 LTS (see `.nvmrc`) and the existing Options Dashboard backend.
+
+1. Start the Options Dashboard FastAPI backend on `http://127.0.0.1:8000` using its normal development command.
+2. From this repository root, run `npm install`.
+3. Run `npm run dev`.
+4. Open `http://127.0.0.1:5173`.
+
+To point the Vite proxy at a different local backend, create `frontend/.env` from `frontend/.env.example` and set `VITE_OPTIONS_API_TARGET`. No broker key or Angel One credential belongs in the frontend.
+
+Run `npm run check` for TypeScript, unit tests and the production build. The frontend is historical-only in this first release; demo fixtures are displayed only when the backend cannot be reached and are explicitly labelled.
+
 ## Documentation
 
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
