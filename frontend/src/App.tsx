@@ -4,6 +4,7 @@ import 'openalgo-charts/indicators'
 import { fetchAvailableDates, fetchStrikesForDate, type IndexName, type OptionSide } from './api'
 import { optionSymbol, parseOptionSymbol } from './data'
 import { TradeThesisDataFeed, type FeedContext, type FeedResult } from './feed'
+import type { RealtimeStatus } from './realtime'
 
 type Mode = 'underlying' | 'option'
 type Theme = 'light' | 'dark'
@@ -49,11 +50,14 @@ export default function App() {
   const [dates, setDates] = useState<string[]>([])
   const [strikes, setStrikes] = useState<number[]>([])
   const [feed, setFeed] = useState<FeedResult | undefined>()
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>({ state: 'disconnected' })
   const [message, setMessage] = useState('Checking local data service')
   const chartRef = useRef<HTMLDivElement | null>(null)
   const widgetRef = useRef<ReturnType<typeof createWidget> | null>(null)
-  const contextRef = useRef<FeedContext>({ index, strike, side, date, onResult: setFeed })
-  contextRef.current = { index, strike, side, date, onResult: setFeed }
+  const contextRef = useRef<FeedContext>({
+    index, strike, side, date, onResult: setFeed, onLiveStatus: setRealtimeStatus,
+  })
+  contextRef.current = { index, strike, side, date, onResult: setFeed, onLiveStatus: setRealtimeStatus }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -97,7 +101,7 @@ export default function App() {
       symbol: 'NIFTY',
       exchange: 'NSE',
       interval: '5m',
-      intervals: ['5m', '15m', '30m', '1h'],
+      intervals: ['1m', '5m', '15m', '30m', '1h'],
       canSelectInterval: (code) => {
         const isOption = parseOptionSymbol(widgetRef.current?.symbol() ?? '') !== undefined
         return isOption ? code === '1m' : ['5m', '15m', '30m', '1h'].includes(code)
@@ -264,7 +268,7 @@ export default function App() {
         <span className="status-spacer" />
         <span>{dates.length} saved sessions</span>
         <span className="status-divider" />
-        <span className="status-live">LIVE FEED NOT CONNECTED</span>
+        <span className="status-live">{realtimeStatus.state === 'live' ? 'REALTIME STREAM CONNECTED' : realtimeStatus.state === 'connecting' ? 'CONNECTING LIVE STREAM' : realtimeStatus.state === 'reconnecting' ? 'RECONNECTING LIVE STREAM' : 'HISTORICAL MODE'}</span>
       </section>
 
       <section className="workspace">
