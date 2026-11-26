@@ -26,5 +26,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Type-check, test and build
+      - name: Type-check, unit test and build
         run: npm run check
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        run: npm run test:e2e
