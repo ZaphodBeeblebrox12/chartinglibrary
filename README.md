@@ -71,6 +71,7 @@ The backend route is `GET /api/chart/crypto/candles?exchange=BINANCE|OKX&interva
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Data contracts and quality rules](docs/DATA_CONTRACTS.md)
+- [First local integration test plan](docs/LOCAL_TEST_PLAN.md)
 
 ## Non-goals for the first milestone
 
