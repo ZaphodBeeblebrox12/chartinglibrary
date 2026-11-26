@@ -41,7 +41,7 @@ export function istTimestampToUtcSeconds(value: string): number | undefined {
   const text = value.trim()
   if (!text) return undefined
   const normalized = text.includes('T') ? text : text.replace(' ', 'T')
-  const hasZone = /(Z|[+-]\\d{2}:\\d{2})$/i.test(normalized)
+  const hasZone = /(Z|[+-]\d{2}:\d{2})$/i.test(normalized)
   const parsed = Date.parse(hasZone ? normalized : `${normalized}+05:30`)
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : undefined
 }
@@ -195,7 +195,7 @@ export function optionSymbol(index: IndexName, strike: number, side: OptionSide)
 export function parseOptionSymbol(
   symbol: string,
 ): { index: IndexName; strike: number; side: OptionSide } | undefined {
-  const match = /^(NIFTY|SENSEX)-(\\d+)-(CE|PE)$/i.exec(symbol.trim())
+  const match = /^(NIFTY|SENSEX)-(\d+)-(CE|PE)$/i.exec(symbol.trim())
   if (!match) return undefined
   return {
     index: match[1].toUpperCase() as IndexName,
