@@ -167,3 +167,17 @@ export async function fetchOptionHistory(
     points: Array.isArray(payload.points) ? payload.points : [],
   }
 }
+
+export async function fetchCryptoCandles(
+  exchange: CryptoExchange,
+  interval: string,
+  date: string,
+  signal?: AbortSignal,
+): Promise<CryptoCandleRow[]> {
+  const params = new URLSearchParams({ exchange, interval, date })
+  const payload = await getJson<{ candles?: CryptoCandleRow[] }>(
+    `/api/chart/crypto/candles?${params.toString()}`,
+    signal,
+  )
+  return Array.isArray(payload.candles) ? payload.candles : []
+}
