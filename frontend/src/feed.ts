@@ -172,7 +172,7 @@ export class TradeThesisDataFeed implements DataFeed {
           connection: 'connected',
           label: bars.length ? 'Saved option snapshots' : 'No saved option observations',
           detail: bars.length
-            ? 'Sampled LTP observations · approximately 30-second capture cadence · ' + (selectedExpiry === 'UNKNOWN' ? 'legacy expiry unknown' : 'expiry ' + selectedExpiry)
+            ? '1m bars from ~30-second LTP samples · OHLC reflects observed samples, not tick-perfect exchange highs/lows · ' + (selectedExpiry === 'UNKNOWN' ? 'legacy expiry unknown' : 'expiry ' + selectedExpiry)
             : `No ${index} ${strike} ${side} observations were found for ${selectedDate}.`,
           barCount: bars.length,
           latest: mapped.latest,
