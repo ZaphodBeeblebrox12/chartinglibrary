@@ -15,6 +15,9 @@ export interface UnderlyingCandleRow {
 export interface OptionHistoryPoint {
   timestamp: string
   option_type: string
+  expiry?: string | null
+  expiry_known?: boolean
+  spot?: number | null
   ltp?: number | null
   oi?: number | null
   oi_change?: number | null
@@ -106,16 +109,49 @@ export async function fetchStrikesForDate(
     : []
 }
 
+export interface OptionExpiryChoices {
+  expiries: string[]
+  hasUnknown: boolean
+  unknownSnapshotCount: number
+}
+
+export async function fetchAvailableExpiries(
+  index: IndexName,
+  date: string,
+  signal?: AbortSignal,
+): Promise<OptionExpiryChoices> {
+  const params = new URLSearchParams({ index, date })
+  const payload = await getJson<{
+    expiries?: string[]
+    unknown_snapshot_count?: number
+  }>(`/api/chart/options/expiries?${params.toString()}`, signal)
+  const expiries = Array.isArray(payload.expiries) ? payload.expiries : []
+  const unknownSnapshotCount = Number(payload.unknown_snapshot_count ?? 0)
+  return {
+    expiries,
+    hasUnknown: unknownSnapshotCount > 0,
+    unknownSnapshotCount: Number.isFinite(unknownSnapshotCount) ? unknownSnapshotCount : 0,
+  }
+}
+
 export async function fetchOptionHistory(
   index: IndexName,
   strike: number,
+  side: OptionSide,
+  expiry: string,
   date: string,
   signal?: AbortSignal,
 ): Promise<OptionHistoryPoint[]> {
-  const params = new URLSearchParams({ index, date })
-  const payload = await getJson<{ timeseries?: OptionHistoryPoint[] }>(
-    `/api/history/${encodeURIComponent(String(strike))}?${params.toString()}`,
+  const params = new URLSearchParams({
+    index,
+    strike: String(strike),
+    option_type: side,
+    expiry,
+    date,
+  })
+  const payload = await getJson<{ points?: OptionHistoryPoint[] }>(
+    `/api/chart/options/history?${params.toString()}`,
     signal,
   )
-  return Array.isArray(payload.timeseries) ? payload.timeseries : []
+  return Array.isArray(payload.points) ? payload.points : []
 }
