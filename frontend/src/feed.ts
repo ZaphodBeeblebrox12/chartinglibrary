@@ -30,6 +30,7 @@ export interface FeedContext {
   strike: number
   side: 'CE' | 'PE'
   date: string
+  expiry: string
   onResult: (result: FeedResult) => void
   onLiveStatus?: (status: RealtimeStatus) => void
 }
@@ -86,7 +87,7 @@ export class TradeThesisDataFeed implements DataFeed {
 
     try {
       if (isOption) {
-        const points = await fetchOptionHistory(index, strike, context.date, request.signal)
+        const points = await fetchOptionHistory(index, strike, side, context.expiry, context.date, request.signal)
         const mapped = mapOptionSnapshots(points, side)
         // The backend endpoint is date-scoped. Return the full selected
         // session so older saved dates are not hidden by the widget's
@@ -97,7 +98,7 @@ export class TradeThesisDataFeed implements DataFeed {
           connection: 'connected',
           label: bars.length ? 'Saved option snapshots' : 'No saved option observations',
           detail: bars.length
-            ? 'Sampled LTP observations · approximately 30-second capture cadence · legacy expiry identity unknown'
+            ? 'Sampled LTP observations · approximately 30-second capture cadence · ' + (context.expiry === 'UNKNOWN' ? 'legacy expiry unknown' : 'expiry ' + context.expiry)
             : `No ${index} ${strike} ${side} observations were found for ${context.date}.`,
           barCount: bars.length,
           latest: mapped.latest,
@@ -156,13 +157,13 @@ export class TradeThesisDataFeed implements DataFeed {
       {
         symbol: optionSymbol(context.index, context.strike, 'CE'),
         exchange: exchangeForIndex(context.index, true),
-        name: `${context.index} ${context.strike} Call · expiry unknown in legacy history`,
+        name: `${context.index} ${context.strike} Call · ${context.expiry}`,
         assetClass: 'Option',
       },
       {
         symbol: optionSymbol(context.index, context.strike, 'PE'),
         exchange: exchangeForIndex(context.index, true),
-        name: `${context.index} ${context.strike} Put · expiry unknown in legacy history`,
+        name: `${context.index} ${context.strike} Put · ${context.expiry}`,
         assetClass: 'Option',
       },
     ]
