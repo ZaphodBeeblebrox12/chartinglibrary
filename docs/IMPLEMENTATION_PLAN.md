@@ -115,6 +115,12 @@ A future tick-recorder or historical broker candle source could improve candle f
 
 **Exit criteria:** the user can select an exact saved NIFTY or SENSEX expiry/strike/side and see historical observations from the dashboard database.
 
+### Future realtime provider requirement
+
+Historical REST and live streaming are separate integration points, not mutually exclusive operating modes. The frontend's custom feed now has an optional `RealtimeProvider` contract that maps to OpenAlgo's `subscribeBars`. The initial delivery leaves this provider unconfigured; the UI reports historical mode honestly.
+
+When Angel One live is added, implement it behind the Options Dashboard/backend boundary (or another explicitly approved local gateway), keep broker credentials server-side, aggregate exchange ticks into the selected interval, and merge new bars onto the historical series. Reuse the existing SmartAPI session where possible; do not add duplicate subscriptions just because Charts is a separate browser application. Keep reconnect, missed-event resync, session rollover and option-expiry identity tests in the acceptance suite.
+
 ### Phase 3 — Live snapshot updates
 
 - Reuse the existing backend's read-only live state or snapshot notification path.
