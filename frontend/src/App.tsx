@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createWidget } from 'openalgo-charts/widget'
 import 'openalgo-charts/indicators'
-import { fetchAvailableDates, fetchStrikesForDate, type IndexName, type OptionSide } from './api'
+import { fetchAvailableDates, fetchAvailableExpiries, fetchStrikesForDate, type IndexName, type OptionSide } from './api'
 import { optionSymbol, parseOptionSymbol } from './data'
 import { TradeThesisDataFeed, type FeedContext, type FeedResult } from './feed'
 import type { RealtimeStatus } from './realtime'
@@ -44,6 +44,8 @@ export default function App() {
   const [strike, setStrike] = useState(25000)
   const [side, setSide] = useState<OptionSide>('CE')
   const [date, setDate] = useState(todayIST)
+  const [expiry, setExpiry] = useState('UNKNOWN')
+  const [expiryChoices, setExpiryChoices] = useState<string[]>(['UNKNOWN'])
   const [interval, setInterval] = useState('5m')
   const [theme, setTheme] = useState<Theme>('light')
   const [apiState, setApiState] = useState<'checking' | 'connected' | 'offline'>('checking')
@@ -55,9 +57,9 @@ export default function App() {
   const chartRef = useRef<HTMLDivElement | null>(null)
   const widgetRef = useRef<ReturnType<typeof createWidget> | null>(null)
   const contextRef = useRef<FeedContext>({
-    index, strike, side, date, onResult: setFeed, onLiveStatus: setRealtimeStatus,
+    index, strike, side, date, expiry, onResult: setFeed, onLiveStatus: setRealtimeStatus,
   })
-  contextRef.current = { index, strike, side, date, onResult: setFeed, onLiveStatus: setRealtimeStatus }
+  contextRef.current = { index, strike, side, date, expiry, onResult: setFeed, onLiveStatus: setRealtimeStatus }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -76,6 +78,26 @@ export default function App() {
     })
     return () => controller.abort()
   }, [index])
+
+  useEffect(() => {
+    if (mode !== 'option') return
+    const controller = new AbortController()
+    fetchAvailableExpiries(index, date, controller.signal).then((available) => {
+      if (controller.signal.aborted) return
+      const choices = [
+        ...available.expiries,
+        ...(available.hasUnknown ? ['UNKNOWN'] : []),
+      ]
+      const nextChoices = choices.length ? choices : ['UNKNOWN']
+      setExpiryChoices(nextChoices)
+      setExpiry((current) => nextChoices.includes(current) ? current : nextChoices[0])
+    }).catch(() => {
+      if (controller.signal.aborted) return
+      setExpiryChoices(['UNKNOWN'])
+      setExpiry('UNKNOWN')
+    })
+    return () => controller.abort()
+  }, [mode, index, date])
 
   useEffect(() => {
     if (mode !== 'option') return
@@ -158,12 +180,12 @@ export default function App() {
     }
   }, [])
 
-  const previousRef = useRef({ mode, index, strike, side, date, interval })
+  const previousRef = useRef({ mode, index, strike, side, date, expiry, interval })
   useEffect(() => {
     const widget = widgetRef.current
     if (!widget) return
     const previous = previousRef.current
-    previousRef.current = { mode, index, strike, side, date, interval }
+    previousRef.current = { mode, index, strike, side, date, expiry, interval }
     void widget.ready.then(() => {
       if (widget.isDestroyed) return
       const symbol = mode === 'option' ? optionSymbol(index, strike, side) : index
@@ -174,11 +196,11 @@ export default function App() {
       if (intervalChanged) widget.setInterval(interval)
       const nextType = mode === 'option' ? 'line' : 'candlestick'
       if (widget.chartType() !== nextType) widget.setChartType(nextType)
-      if (!symbolChanged && !intervalChanged && previous.date !== date) void widget.reload()
+      if (!symbolChanged && !intervalChanged && (previous.date !== date || previous.expiry !== expiry)) void widget.reload()
     }).catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : 'Unable to update chart')
     })
-  }, [mode, index, strike, side, date, interval])
+  }, [mode, index, strike, side, date, expiry, interval])
 
   useEffect(() => {
     const widget = widgetRef.current
@@ -252,7 +274,15 @@ export default function App() {
                 : <option value={strike}>{fmtInt(strike)}</option>}
             </select>
           </label>
-          <span className="legacy-tag">EXPIRY UNKNOWN</span>
+          <label className="toolbar-group">
+            <span className="toolbar-caption">EXPIRY</span>
+            <select className="control-select expiry-select" value={expiry}
+              onChange={(event) => setExpiry(event.target.value)}>
+              {expiryChoices.map((value) => (
+                <option key={value} value={value}>{value === 'UNKNOWN' ? 'Legacy / unknown' : value}</option>
+              ))}
+            </select>
+          </label>
         </>}
         <span className="toolbar-spacer" />
         <label className="toolbar-group">
@@ -279,7 +309,7 @@ export default function App() {
               <small>{exchangeFor(index, mode === 'option')}</small>
             </h1>
             <p>{mode === 'option'
-              ? 'Sampled LTP observations · historical expiry identity unknown'
+              ? (expiry === 'UNKNOWN' ? 'Sampled LTP observations · historical expiry unknown' : 'Sampled LTP observations · expiry ' + expiry)
               : 'Tick-built underlying OHLC · cash volume unavailable'}</p>
           </div>
           <div className="chart-meta">
@@ -310,7 +340,7 @@ export default function App() {
       <footer className="app-footer">
         <div><strong>TRADETHESIS CHARTS</strong><span>Local-first analysis. No order execution.</span></div>
         <p>{mode === 'option'
-          ? 'Option prices are sampled database observations, not tick-perfect OHLC. Historical expiry is not stored in legacy rows.'
+          ? 'Option prices are sampled observations, not tick-perfect OHLC. Legacy rows remain separate from expiry-specific history.'
           : 'Underlying OHLC is loaded from the Options Dashboard candle store. Cash index volume is unavailable.'}</p>
         <span className="version-label">EARLY ACCESS · 0.1.0</span>
       </footer>
