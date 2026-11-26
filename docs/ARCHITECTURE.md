@@ -29,9 +29,9 @@ Do not duplicate Angel One login, SmartAPI subscriptions, tick ingestion or Gree
 
 ## 2. Existing data source
 
-The current snapshot writer captures an index state and the active option chain. The resolved expiry key is available in the capture path, but the current SQL writer does not persist it. A nullable parent `snapshots.expiry` field must be added before exact historical contract selection can be guaranteed.
+The snapshot writer now persists the already-resolved expiry key into nullable `snapshots.expiry` in the same parent snapshot row. The migration is backward-compatible; old rows remain `NULL` and must never be assigned today's expiry retroactively.
 
-Current snapshot cadence is approximately 30 seconds. The primary option history path joins `snapshots` with `option_snapshots` by `snapshot_id`.
+Current snapshot cadence is approximately 30 seconds. The chart API `GET /api/chart/options/expiries` lists session expiries; `GET /api/chart/options/history` selects one exact expiry, strike and side (or the separate `UNKNOWN` legacy series). Queries use parent snapshot IDs and the `idx_snapshots_expiry_index_ts` index.
 
 ### Existing underlying OHLC — reuse it
 
@@ -45,13 +45,13 @@ The Options Dashboard already builds tick-based one-minute OHLC for underlying C
 This is genuine tick-built underlying OHLC, not option-premium OHLC. Reuse it for NIFTY/SENSEX underlying charts. The CASH/spot candles currently have null volume because the tick mode used here does not carry LTQ.
 
 
-Existing endpoint `GET /api/history/{strike}?date=YYYY-MM-DD&index=NIFTY|SENSEX` returns both CE and PE observations for one strike and date. It includes timestamp, OI, OI change, volume-validity metadata, LTP, IV, Delta, Gamma, Theta, Vega and GEX. A new chart endpoint should add explicit expiry and date-range filters rather than making the frontend fetch and filter unbounded history.
+The legacy endpoint `GET /api/history/{strike}` remains unchanged for the Options Dashboard UI. TradeThesis Charts uses the new expiry-aware chart endpoints so it does not combine different option contracts.
 
 ## 3. Frontend modules
 
 - **App shell:** top bar, instrument selector, theme switch, workspace chrome.
 - **Chart host:** owns OpenAlgo widget lifecycle; mount once after container sizing, destroy on unmount.
-- **TradeThesisDataFeed:** adapts local HTTP history and existing live notifications into OpenAlgo's DataFeed contract.
+- **TradeThesisDataFeed:** adapts local expiry-aware historical HTTP endpoints into OpenAlgo's DataFeed contract; optionally delegates `subscribeBars` to an independent `RealtimeProvider`.
 - **Instrument resolver:** NIFTY/SENSEX, expiry, strike and CE/PE. The instrument identity must be explicit and stable.
 - **Series adapters:** LTP observations, snapshot-derived bars, valid volume deltas, OI, IV and Greeks.
 - **Workspace persistence:** saved drawings, indicators, chart layouts and selected theme.
@@ -110,4 +110,4 @@ Prefer LTP line view as the default historical representation. Candlestick view 
 - Do not expose API keys, JWTs, broker credentials or account actions in the browser.
 - Do not execute or submit trades from the initial app.
 - Charts should work with fixture data when the API is unavailable.
-- No backend schema is altered by this frontend repository; the expiry persistence migration is made in the Options Dashboard repository separately, tested and backward-compatible.
+- The expiry migration and chart-history API live in the Options Dashboard repository; they are backward-compatible and tested separately from this frontend.
