@@ -106,4 +106,38 @@ describe('OKX public realtime candles', () => {
 
     unsubscribe()
   })
+
+})
+
+describe('Binance public realtime candles', () => {
+  it('connects to the market-data-only stream and maps kline updates', () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    const onBar = vi.fn()
+    const unsubscribe = subscribeCryptoBars(
+      'BINANCE',
+      { ...request, exchange: 'BINANCE', interval: '5m' },
+      new Date().toISOString().slice(0, 10),
+      onBar,
+      vi.fn(),
+    )
+    const socket = FakeWebSocket.instances[0]
+
+    expect(socket.url).toBe('wss://data-stream.binance.vision/ws/btcusdt@kline_5m')
+    socket.open()
+    socket.message(JSON.stringify({
+      e: 'kline',
+      s: 'BTCUSDT',
+      k: { t: 1795651200000, o: '90000', h: '91000', l: '89500', c: '90500', v: '12.5' },
+    }))
+
+    expect(onBar).toHaveBeenCalledWith({
+      time: 1795651200,
+      open: 90000,
+      high: 91000,
+      low: 89500,
+      close: 90500,
+      volume: 12.5,
+    })
+    unsubscribe()
+  })
 })
