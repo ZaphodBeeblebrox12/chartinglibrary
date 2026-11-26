@@ -1,4 +1,5 @@
-import type { BarsRequest, DataFeed, SymbolMatch, SymbolSearchRequest } from 'openalgo-charts'
+import type { Bar, BarSubscriptionOptions, BarsRequest, DataFeed, LiveBarMeta, SymbolMatch, SymbolSearchRequest, UnsubscribeFn } from 'openalgo-charts'
+import type { RealtimeProvider, RealtimeStatus } from './realtime'
 import {
   fetchOptionHistory,
   fetchUnderlyingCandles,
@@ -30,6 +31,7 @@ export interface FeedContext {
   side: 'CE' | 'PE'
   date: string
   onResult: (result: FeedResult) => void
+  onLiveStatus?: (status: RealtimeStatus) => void
 }
 
 type Interval = '5m' | '15m' | '30m' | '1h'
@@ -42,7 +44,26 @@ function exchangeForIndex(index: IndexName, option: boolean): string {
 }
 
 export class TradeThesisDataFeed implements DataFeed {
-  constructor(private readonly getContext: () => FeedContext) {}
+  public subscribeBars?: (
+    request: BarsRequest,
+    onBar: (bar: Bar, meta?: LiveBarMeta) => void,
+    opts?: BarSubscriptionOptions,
+  ) => UnsubscribeFn
+
+  constructor(
+    private readonly getContext: () => FeedContext,
+    realtimeProvider?: RealtimeProvider,
+  ) {
+    if (realtimeProvider) {
+      this.subscribeBars = (request, onBar, opts) =>
+        realtimeProvider.subscribeBars(
+          request,
+          onBar,
+          (status) => this.getContext().onLiveStatus?.(status),
+          opts,
+        )
+    }
+  }
 
   async getBars(request: BarsRequest) {
     const context = this.getContext()
@@ -67,10 +88,10 @@ export class TradeThesisDataFeed implements DataFeed {
       if (isOption) {
         const points = await fetchOptionHistory(index, strike, context.date, request.signal)
         const mapped = mapOptionSnapshots(points, side)
-        const bars = mapped.bars.filter((bar) =>
-          (request.from === undefined || bar.time >= request.from) &&
-          (request.to === undefined || bar.time <= request.to),
-        )
+        // The backend endpoint is date-scoped. Return the full selected
+        // session so older saved dates are not hidden by the widget's
+        // default lookback window anchored to today's clock.
+        const bars = mapped.bars
         context.onResult({
           source: bars.length ? 'database-options' : 'empty',
           connection: 'connected',
@@ -90,10 +111,9 @@ export class TradeThesisDataFeed implements DataFeed {
         context.date,
         request.signal,
       )
-      const bars = mapUnderlyingCandles(rows).filter((bar) =>
-        (request.from === undefined || bar.time >= request.from) &&
-        (request.to === undefined || bar.time <= request.to),
-      )
+      // The local endpoint returns one complete session. Do not compare
+      // the selected historical date against a "now"-based chart lookback.
+      const bars = mapUnderlyingCandles(rows)
       context.onResult({
         source: bars.length ? 'database-underlying' : 'empty',
         connection: 'connected',
@@ -112,9 +132,6 @@ export class TradeThesisDataFeed implements DataFeed {
         request.interval,
         context.date,
         isOption,
-      ).filter((bar) =>
-        (request.from === undefined || bar.time >= request.from) &&
-        (request.to === undefined || bar.time <= request.to),
       )
       context.onResult({
         source: 'demo',
