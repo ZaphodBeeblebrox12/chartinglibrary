@@ -148,6 +148,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   font-size: 11px;
 }
 .strike-select { min-width: 93px; font-family: 'DM Mono', monospace; font-weight: 500; }
+.expiry-select { min-width: 125px; font-family: 'DM Mono', monospace; font-size: 10px; }
 .control-input { min-width: 135px; font-family: 'DM Mono', monospace; }
 .today-button {
   height: 31px;
