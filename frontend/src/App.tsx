@@ -124,6 +124,8 @@ export default function App() {
     side,
     date,
     expiry,
+    interval,
+    theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
   })
@@ -136,6 +138,8 @@ export default function App() {
     side,
     date,
     expiry,
+    interval,
+    theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
   }
