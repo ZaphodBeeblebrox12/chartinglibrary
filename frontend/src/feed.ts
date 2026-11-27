@@ -196,7 +196,7 @@ export class TradeThesisDataFeed implements DataFeed {
       }
 
       const rows = await fetchUnderlyingCandles(
-        index,
+        requestSymbol,
         request.interval,
         selectedDate,
         request.signal,
