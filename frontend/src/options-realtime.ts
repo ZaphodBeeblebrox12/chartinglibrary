@@ -5,6 +5,7 @@ import type {
   UnsubscribeFn,
 } from 'openalgo-charts'
 import type { RealtimeProvider, RealtimeStatus } from './realtime'
+import type { OptionMetrics } from './data'
 import { istTimestampToUtcSeconds, parseOptionSymbol } from './data'
 
 type LiveIndexState = {
@@ -95,17 +96,20 @@ function bucketStart(
  * No broker credentials or duplicate broker WebSocket are created here.
  */
 export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
+  constructor(
+    private readonly getSelectedDate: () => string,
+    private readonly onOptionMetrics?: (metrics: OptionMetrics) => void,
+  ) {}
+
   subscribeBars(
     request: BarsRequest,
     onBar: (bar: Bar, meta?: LiveBarMeta) => void,
     onStatus: (next: RealtimeStatus) => void,
   ): UnsubscribeFn {
-    const selectedDate = todayIST()
+    const selectedDate = this.getSelectedDate()
     if (request.signal?.aborted) return () => undefined
-    if (request.interval && request.exchange.toUpperCase() !== 'NFO' &&
-        request.exchange.toUpperCase() !== 'BFO' &&
-        selectedDate.length === 0) {
-      status(onStatus, 'disconnected', 'Invalid local session date')
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate)) {
+      status(onStatus, 'disconnected', 'Invalid selected session date')
       return () => undefined
     }
     if (selectedDate !== todayIST()) {
@@ -235,6 +239,24 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
           if (ltp === undefined || ltp <= 0) return
           const timestamp = point?.source_updated_at || data.timestamp
           if (!timestamp || !timestamp.startsWith(selectedDate)) return
+          const sourceAge = finite(point?.source_age_sec)
+          if (sourceAge !== undefined && sourceAge > 90) {
+            status(onStatus, 'reconnecting', `Selected option sample is stale (${Math.round(sourceAge)}s)`)
+            return
+          }
+          this.onOptionMetrics?.({
+            timestamp,
+            ltp,
+            ...(finite(point?.oi) === undefined ? {} : { oi: finite(point?.oi) }),
+            ...(finite(point?.oi_change) === undefined ? {} : { oiChange: finite(point?.oi_change) }),
+            ...(finite(point?.volume) === undefined ? {} : { volume: finite(point?.volume) }),
+            ...(finite(point?.iv) === undefined ? {} : { iv: finite(point?.iv) }),
+            ...(finite(point?.delta) === undefined ? {} : { delta: finite(point?.delta) }),
+            ...(finite(point?.gamma) === undefined ? {} : { gamma: finite(point?.gamma) }),
+            ...(finite(point?.theta) === undefined ? {} : { theta: finite(point?.theta) }),
+            ...(finite(point?.vega) === undefined ? {} : { vega: finite(point?.vega) }),
+            ...(sourceAge === undefined ? {} : { sourceAgeSec: sourceAge }),
+          })
           const time = istTimestampToUtcSeconds(timestamp)
           if (time === undefined) return
           const minute = Math.floor(time / 60) * 60
