@@ -239,8 +239,11 @@ export default function App() {
       if (controller.signal.aborted) return
       setGlobalInstruments(items)
       setGlobalSymbol(current => current || items[0]?.name || 'EURUSD')
-      if (!items.some(item => item.name === globalSymbol) && items.length) {
-        const preferred = items.find(item => item.name === 'EURUSD') ?? items[0]
+      const savedGlobal = items.find(item => item.name === globalSymbol)
+      if (savedGlobal) {
+        setGlobalType(savedGlobal.type)
+      } else if (items.length) {
+        const preferred = items.find(item => item.name === 'EURUSD') ?? items.find(item => item.type === 'Forex') ?? items[0]
         setGlobalSymbol(preferred.name)
         setGlobalType(preferred.type)
       }
@@ -1022,9 +1025,15 @@ export default function App() {
         <div><strong>TRADETHESIS CHARTS</strong><span>Local-first analysis. No order execution.</span></div>
         <p>{market === 'BTC'
           ? 'BTC/USDT spot data is sourced from the selected exchange. Exchange prices and volumes may differ; charts use UTC timestamps.'
-          : mode === 'option'
-            ? 'Option prices are sampled observations, not tick-perfect OHLC. Legacy rows remain separate from expiry-specific history.'
-            : 'Underlying OHLC is loaded from the Options Dashboard candle store. Cash index volume is unavailable.'}</p>
+          : market === 'GLOBAL'
+            ? 'Biquote indicative data is for chart display, not guaranteed executable pricing. FX/CFD volume is tick volume, not central-exchange volume; provider history is rolling and its uptime is not guaranteed.'
+            : market === 'COMMODITY'
+              ? 'MCX data is a configured front-month futures contract, not a spot commodity benchmark. Contract rollover and expiry must be considered when comparing long history.'
+              : market === 'STOCK'
+                ? 'Cash equity OHLC is built from configured Angel One cash-tick subscriptions. Historical coverage depends on when that instrument was first tracked.'
+                : mode === 'option'
+                  ? 'Option prices are sampled observations, not tick-perfect OHLC. Legacy rows remain separate from expiry-specific history.'
+                  : 'Underlying OHLC is loaded from the Options Dashboard candle store. Cash index volume is unavailable.'}</p>
         <span className="version-label">EARLY ACCESS · 0.1.0</span>
       </footer>
     </main>
