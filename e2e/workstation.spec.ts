@@ -21,6 +21,16 @@ test.beforeEach(async ({ page }) => {
     else if (url.pathname.endsWith('/api/chart/options/expiries')) body = { expiries: [], hasUnknown: false }
     else if (url.pathname.endsWith('/api/chart/options/strikes')) body = { strikes: [] }
     else if (url.pathname.endsWith('/api/chart/options/history')) body = { points: [], quality: {}, sampling: {} }
+    else if (url.pathname.endsWith('/api/chart/options/chain')) body = {
+      index_name: 'NIFTY',
+      date: '2026-11-27',
+      expiry: null,
+      asof: null,
+      spot: null,
+      strikes: [],
+      analytics: {},
+      quality: { empty: true },
+    }
     else if (url.pathname.endsWith('/api/scanner/candles')) body = { candles: [] }
     else if (url.pathname.endsWith('/api/chart/crypto/candles')) body = { candles: [] }
     await route.fulfill({
