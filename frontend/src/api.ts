@@ -286,7 +286,7 @@ export async function fetchGlobalMarketInstruments(
   signal?: AbortSignal,
 ): Promise<GlobalMarketInstrument[]> {
   const response = await fetch(
-    'https://biquote.io/api/symbols?source=MT5&quotedWithinDays=7',
+    'https://biquote.io/api/symbols?quotedWithinDays=7',
     { headers: { Accept: 'application/json' }, signal },
   )
   if (!response.ok) {
