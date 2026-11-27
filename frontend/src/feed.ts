@@ -7,6 +7,7 @@ import {
   type CryptoExchange,
   type IndexName,
   type TrackedCashInstrument,
+  type GlobalMarketInstrument,
 } from './api'
 import {
   createFixtureBars,
@@ -18,6 +19,7 @@ import {
   type OptionMetrics,
 } from './data'
 import { subscribeCryptoBars } from './crypto-realtime'
+import { fetchBiquoteCandles, subscribeBiquoteBars } from './global-market'
 
 export type FeedSource = 'database-underlying' | 'database-options' | 'exchange-crypto' | 'demo' | 'empty' | 'unsupported'
 
@@ -31,10 +33,12 @@ export interface FeedResult {
 }
 
 export interface FeedContext {
-  market: 'INDEX' | 'STOCK' | 'BTC'
+  market: 'INDEX' | 'STOCK' | 'COMMODITY' | 'GLOBAL' | 'BTC'
   selectedCashInstrument: string
   selectedCashExchange: string
+  globalSymbol: string
   cashInstruments?: TrackedCashInstrument[]
+  globalInstruments?: GlobalMarketInstrument[]
   mode: 'underlying' | 'option'
   cryptoExchange: CryptoExchange
   index: IndexName
@@ -52,11 +56,13 @@ export interface FeedContext {
 export function feedScopeKey(context: FeedContext): string {
   const instrumentScope = context.market === 'BTC'
     ? `BTC-${context.cryptoExchange}`
-    : context.market === 'STOCK'
-      ? `CASH-${context.selectedCashExchange}-${context.selectedCashInstrument}`
-      : context.mode === 'option'
-        ? `OPTION-${context.expiry}`
-        : 'INDEX'
+    : context.market === 'GLOBAL'
+      ? `GLOBAL-${context.globalSymbol}`
+      : context.market === 'STOCK' || context.market === 'COMMODITY'
+        ? `CASH-${context.market}-${context.selectedCashExchange}-${context.selectedCashInstrument}`
+        : context.mode === 'option'
+          ? `OPTION-${context.expiry}`
+          : 'INDEX'
   return `${context.date}|${instrumentScope}`
 }
 
@@ -99,8 +105,30 @@ export class TradeThesisDataFeed implements DataFeed {
           exchange,
           request,
           selectedDate,
-          onBar,
+          (bar, meta) => {
+            onBar(bar, meta)
+            context.onLiveMetrics?.({
+              timestamp: new Date(bar.time * 1000).toISOString(),
+              ltp: bar.close,
+            })
+          },
           (status) => context.onLiveStatus?.(status),
+        )
+      }
+      if (exchange === 'BIQUOTE') {
+        const instrument = context.globalInstruments?.find(item => item.name === request.symbol)
+        if (!instrument) {
+          context.onLiveStatus?.({ state: 'disconnected', message: 'Global instrument is not in the current provider catalogue' })
+          return () => undefined
+        }
+        const selectedDate = dateFromScope(request.variant?.unit, context.date)
+        return subscribeBiquoteBars(
+          instrument,
+          request,
+          selectedDate,
+          (bar, meta) => onBar(bar, meta),
+          (status) => context.onLiveStatus?.(status),
+          (price, timestamp) => context.onLiveMetrics?.({ timestamp, ltp: price }),
         )
       }
       if (realtimeProvider) {
@@ -128,6 +156,7 @@ export class TradeThesisDataFeed implements DataFeed {
     const side = option?.side ?? context.side
     const exchange = request.exchange.toUpperCase()
     const isCrypto = exchange === 'BINANCE' || exchange === 'OKX'
+    const isGlobal = exchange === 'BIQUOTE'
     const isOption = option !== undefined || exchange === 'NFO' || exchange === 'BFO'
     const selectedExpiry = option?.expiry ?? context.expiry
 
@@ -142,7 +171,18 @@ export class TradeThesisDataFeed implements DataFeed {
       return []
     }
 
-    if (!isCrypto && !isOption && !UNDERLYING_INTERVALS.has(request.interval)) {
+    if (isGlobal && !['1m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(request.interval)) {
+      context.onResult({
+        source: 'unsupported',
+        connection: 'unknown',
+        label: 'Global timeframe not available',
+        detail: 'Biquote supports 1m, 5m, 15m, 30m, 1h, 4h and 1d.',
+        barCount: 0,
+      })
+      return []
+    }
+
+    if (!isCrypto && !isGlobal && !isOption && !UNDERLYING_INTERVALS.has(request.interval)) {
       context.onResult({
         source: 'unsupported',
         connection: 'unknown',
@@ -154,6 +194,22 @@ export class TradeThesisDataFeed implements DataFeed {
     }
 
     try {
+      if (isGlobal) {
+        const rows = await fetchBiquoteCandles(request.symbol, request.interval, selectedDate, request.signal)
+        const instrument = context.globalInstruments?.find(item => item.name === request.symbol)
+        const bars = rows
+        context.onResult({
+          source: bars.length ? 'exchange-crypto' : 'empty',
+          connection: 'connected',
+          label: bars.length ? `BIQUOTE · ${request.symbol}` : `No ${request.symbol} candles on ${selectedDate} UTC`,
+          detail: bars.length
+            ? `Indicative ${instrument?.type ?? 'global market'} mid-price OHLC · tick volume is not exchange-traded volume · ${bars.length} bars`
+            : `No Biquote OHLC data returned for ${request.symbol} on ${selectedDate}. The provider only retains rolling history.`,
+          barCount: bars.length,
+        })
+        return bars
+      }
+
       if (isCrypto) {
         const rows = await fetchCryptoCandles(exchange, request.interval, selectedDate, request.signal)
         const bars = mapCryptoCandles(rows)
@@ -217,12 +273,12 @@ export class TradeThesisDataFeed implements DataFeed {
     } catch (error) {
       if (request.signal?.aborted) throw error
       const message = error instanceof Error ? error.message : 'Unable to reach the market-data service'
-      if (isCrypto) {
+      if (isCrypto || isGlobal) {
         context.onResult({
           source: 'empty',
           connection: 'offline',
           label: `${exchange} DATA UNAVAILABLE`,
-          detail: `${message}. No synthetic BTC prices are substituted.`,
+          detail: `${message}. No synthetic market prices are substituted.`,
           barCount: 0,
         })
         return []
@@ -256,8 +312,14 @@ export class TradeThesisDataFeed implements DataFeed {
       ...(context.cashInstruments ?? []).map(item => ({
         symbol: item.name,
         exchange: item.exchange,
-        name: `${item.name} · ${item.exchange} Cash`,
-        assetClass: 'Stock',
+        name: `${item.name} · ${item.exchange} ${item.kind === 'COMMODITY' ? 'Front-month Futures' : 'Cash'}`,
+        assetClass: item.kind === 'COMMODITY' ? 'Commodity' : 'Stock',
+      })),
+      ...(context.globalInstruments ?? []).map(item => ({
+        symbol: item.name,
+        exchange: 'BIQUOTE',
+        name: `${item.name} · ${item.description}`,
+        assetClass: item.type,
       })),
     ]
     const optionChoices: SymbolMatch[] = [
