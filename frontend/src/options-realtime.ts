@@ -22,6 +22,16 @@ type LiveIndexState = {
       strike: number
       option_type: string
       ltp?: number | null
+      oi?: number | null
+      oi_change?: number | null
+      volume?: number | null
+      volume_valid?: boolean
+      iv?: number | null
+      delta?: number | null
+      gamma?: number | null
+      theta?: number | null
+      vega?: number | null
+      gex?: number | null
       source_updated_at?: string | null
       source_age_sec?: number | null
     }>
