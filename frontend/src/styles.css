@@ -597,3 +597,199 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   .stock-select { max-width: 100%; }
   .oac-grid { min-height: 480px; }
 }
+
+
+/* ── Drawing manager / object inventory ────────────────────── */
+.drawing-manager {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px;
+}
+.drawing-manager-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.drawing-manager-head h2 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font: 700 15px 'Manrope', sans-serif;
+}
+.drawing-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.drawing-history-controls button,
+.drawing-tool-row button,
+.drawing-tool-choice button,
+.drawing-group-create button,
+.drawing-object button {
+  border: 1px solid var(--line-strong);
+  background: var(--panel-strong);
+  color: var(--ink);
+  border-radius: 2px;
+  min-height: 27px;
+  padding: 3px 8px;
+  font: 9px 'DM Mono', monospace;
+}
+.drawing-history-controls button:disabled,
+.drawing-object button:disabled,
+.drawing-group-create button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+.drawing-tool-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.drawing-magnet,
+.drawing-favorites {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.drawing-magnet > span,
+.drawing-favorites > span {
+  display: block;
+  width: 100%;
+  color: var(--faint);
+  font: 8px 'DM Mono', monospace;
+  letter-spacing: .5px;
+}
+.drawing-magnet select,
+.drawing-group-create input {
+  min-height: 27px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-strong);
+  color: var(--ink);
+  padding: 3px 8px;
+  font: 9px 'DM Mono', monospace;
+}
+.drawing-tool-row button.active,
+.drawing-tool-choice button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drawing-tool-catalog {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.drawing-tool-group > strong {
+  display: block;
+  color: var(--faint);
+  font: 8px 'DM Mono', monospace;
+  letter-spacing: .6px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+.drawing-tool-group > div {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 27px;
+  gap: 4px;
+}
+.drawing-tool-choice { display: contents; }
+.drawing-tool-choice button:first-child { text-align: left; }
+.drawing-tool-choice .favorite-star { color: var(--accent); padding: 3px; }
+.drawing-object-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0 6px;
+}
+.drawing-object-head strong { color: var(--ink); font: 700 10px 'Manrope', sans-serif; }
+.drawing-object-head span { color: var(--faint); font: 8px 'DM Mono', monospace; }
+.drawing-object-list { display: grid; gap: 3px; }
+.drawing-object {
+  display: grid;
+  grid-template-columns: 18px minmax(0,1fr) auto auto 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--line);
+}
+.drawing-object.selected { background: var(--accent-soft); }
+.drawing-object input { accent-color: var(--accent); }
+.drawing-object-name {
+  display: grid;
+  gap: 2px;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left;
+  padding-left: 0 !important;
+}
+.drawing-object-name strong {
+  color: var(--ink);
+  font: 600 9px 'DM Mono', monospace;
+  text-transform: capitalize;
+}
+.drawing-object-name small {
+  color: var(--faint);
+  font: 8px 'DM Mono', monospace;
+}
+.drawing-object > button:last-child { color: var(--red); }
+.drawing-empty {
+  margin: 0;
+  padding: 12px 2px;
+  color: var(--faint);
+  font-size: 9px;
+}
+.drawing-group-create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.drawing-group-create input { min-width: 130px; }
+.drawing-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.drawing-groups span {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font: 8px 'DM Mono', monospace;
+}
+.drawing-groups small { margin-left: 5px; color: var(--faint); }
+.alert-notification-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font: 8px 'DM Mono', monospace;
+}
+.alert-notification-control button {
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--ink);
+  min-height: 26px;
+  padding: 3px 8px;
+  font: 8px 'DM Mono', monospace;
+}
+.global-search { min-width: 110px; max-width: 130px; }
+.global-symbol-select { min-width: 165px; max-width: 220px; }
+@media (max-width: 760px) {
+  .drawing-manager-head { align-items: flex-start; flex-direction: column; }
+  .drawing-tool-catalog { grid-template-columns: 1fr 1fr; }
+  .drawing-object { grid-template-columns: 18px minmax(0,1fr) auto auto 26px; gap: 3px; }
+}
+@media (max-width: 520px) {
+  .drawing-tool-catalog { grid-template-columns: 1fr; }
+  .drawing-object button { padding: 3px 4px; }
+}
