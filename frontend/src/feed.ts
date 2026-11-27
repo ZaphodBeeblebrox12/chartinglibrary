@@ -21,7 +21,7 @@ import {
 import { subscribeCryptoBars } from './crypto-realtime'
 import { fetchBiquoteCandles, subscribeBiquoteBars } from './global-market'
 
-export type FeedSource = 'database-underlying' | 'database-options' | 'exchange-crypto' | 'demo' | 'empty' | 'unsupported'
+export type FeedSource = 'database-underlying' | 'database-options' | 'exchange-crypto' | 'global-market' | 'demo' | 'empty' | 'unsupported'
 
 export interface FeedResult {
   source: FeedSource
@@ -199,7 +199,7 @@ export class TradeThesisDataFeed implements DataFeed {
         const instrument = context.globalInstruments?.find(item => item.name === request.symbol)
         const bars = rows
         context.onResult({
-          source: bars.length ? 'exchange-crypto' : 'empty',
+          source: bars.length ? 'global-market' : 'empty',
           connection: 'connected',
           label: bars.length ? `BIQUOTE · ${request.symbol}` : `No ${request.symbol} candles on ${selectedDate} UTC`,
           detail: bars.length
