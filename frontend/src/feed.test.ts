@@ -7,7 +7,15 @@ const base: FeedContext = {
   cryptoExchange: 'BINANCE',
   selectedCashInstrument: 'RELIANCE',
   selectedCashExchange: 'NSE',
-  cashInstruments: [{ name: 'RELIANCE', kind: 'STOCK', tier: 2, exchange: 'NSE' }],
+  globalSymbol: 'EURUSD',
+  cashInstruments: [
+    { name: 'RELIANCE', kind: 'STOCK', tier: 2, exchange: 'NSE' },
+    { name: 'GOLD', kind: 'COMMODITY', tier: 2, exchange: 'MCX' },
+  ],
+  globalInstruments: [{
+    name: 'EURUSD', description: 'Euro vs US Dollar',
+    type: 'Forex', exchange: 'Forex', source: 'MT5',
+  }],
   index: 'NIFTY',
   strike: 25000,
   side: 'CE',
@@ -28,6 +36,20 @@ describe('chart data-series identity', () => {
     expect(feedScopeKey({ ...base, mode: 'option' })).toBe('2026-11-26|OPTION-26NOV2026')
     expect(feedScopeKey({ ...base, mode: 'option', expiry: '03DEC2026' }))
       .toBe('2026-11-26|OPTION-03DEC2026')
+  })
+
+  it('isolates cash equities and MCX futures by market type and symbol', () => {
+    const stock: FeedContext = { ...base, market: 'STOCK' }
+    const commodity: FeedContext = {
+      ...base, market: 'COMMODITY', selectedCashInstrument: 'GOLD', selectedCashExchange: 'MCX',
+    }
+    expect(feedScopeKey(stock)).toBe('2026-11-26|CASH-STOCK-NSE-RELIANCE')
+    expect(feedScopeKey(commodity)).toBe('2026-11-26|CASH-COMMODITY-MCX-GOLD')
+  })
+
+  it('isolates global provider instruments from exchange-traded crypto', () => {
+    const global: FeedContext = { ...base, market: 'GLOBAL', globalSymbol: 'EURUSD' }
+    expect(feedScopeKey(global)).toBe('2026-11-26|GLOBAL-EURUSD')
   })
 
   it('isolates the two crypto exchanges', () => {
