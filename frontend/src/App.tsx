@@ -562,6 +562,48 @@ export default function App() {
   }, [theme, widgetReady])
 
   useEffect(() => {
+    if (!widgetReady || market !== 'INDEX' || mode !== 'underlying' || !chain) return
+    const grid = gridRef.current
+    if (!grid) return
+    const widget = grid.active().widget
+    if (!['NSE', 'BSE'].includes(widget.exchange().toUpperCase())) return
+
+    const now = Math.floor(Date.now() / 1000)
+    const levels = [
+      { id: 'tradethesis-call-oi-wall', label: 'CALL OI WALL', value: chain.analytics.call_wall, color: '#16a36a' },
+      { id: 'tradethesis-put-oi-wall', label: 'PUT OI WALL', value: chain.analytics.put_wall, color: '#db4c5a' },
+      { id: 'tradethesis-max-pain', label: 'MAX PAIN', value: chain.analytics.max_pain, color: '#d99a28' },
+      { id: 'tradethesis-gamma-flip', label: 'GAMMA FLIP', value: chain.analytics.gamma_flip, color: '#8b63c7' },
+      { id: 'tradethesis-max-gex', label: 'MAX GEX STRIKE', value: chain.analytics.max_gex_strike, color: '#397dd4' },
+    ].filter((level): level is typeof level & { value: number } =>
+      typeof level.value === 'number' && Number.isFinite(level.value) && level.value > 0,
+    )
+
+    // Dynamic analytical levels are real chart drawings, not HTML lines.
+    // They are read-only/transient so they follow the selected date/expiry
+    // but do not overwrite the trader's own drawings in the instrument store.
+    for (const level of levels) {
+      const existing = widget.draw.get(level.id)
+      if (existing) widget.draw.remove(level.id, { force: true })
+      widget.draw.add({
+        id: level.id,
+        tool: 'horizontal-line',
+        paneIndex: 0,
+        points: [{ time: now, price: level.value }],
+        style: { color: level.color, lineWidth: 1.5, lineStyle: 'dashed', showLabels: true },
+        text: { value: level.label, color: level.color, position: 'right' },
+        policy: { editable: false, persistent: false, listed: false },
+      })
+    }
+
+    return () => {
+      for (const level of levels) {
+        if (widget.draw.get(level.id)) widget.draw.remove(level.id, { force: true })
+      }
+    }
+  }, [widgetReady, market, mode, chain])
+
+  useEffect(() => {
     if (!widgetReady) return
     const stored: SavedContext = {
       market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, globalSymbol, globalType, date, expiry, interval, theme,
