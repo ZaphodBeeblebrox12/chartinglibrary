@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createChartGrid, type ChartGrid, type ChartGridLayoutId } from 'openalgo-charts/widget'
 import { WorkspaceRepository, createIndexedDbWorkspaceStorage } from 'openalgo-charts/workspace'
 import 'openalgo-charts/indicators'
+import 'openalgo-charts/draw'
 import {
   fetchAvailableDates,
   fetchAvailableExpiries,
@@ -25,6 +26,7 @@ import type { RealtimeStatus } from './realtime'
 import { OptionsDashboardRealtimeProvider } from './options-realtime'
 import { OptionAnalyticsPanel } from './analytics-panels'
 import { ChartAlertsPanel } from './chart-alerts'
+import { DrawingManagerPanel } from './drawing-manager'
 import type { OptionMetrics } from './data'
 
 type Mode = 'underlying' | 'option'
@@ -154,6 +156,7 @@ export default function App() {
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>({ state: 'disconnected' })
   const [message, setMessage] = useState('Checking local data service')
   const [liveMetrics, setLiveMetrics] = useState<OptionMetrics | undefined>()
+  const [drawRevision, setDrawRevision] = useState(0)
   const [callHistory, setCallHistory] = useState<OptionHistoryPoint[]>([])
   const [putHistory, setPutHistory] = useState<OptionHistoryPoint[]>([])
   const [chain, setChain] = useState<OptionChainResponse | undefined>()
@@ -488,6 +491,10 @@ export default function App() {
           if (error) setMessage(error)
           else if (bars > 0) setMessage('Chart history loaded')
         }),
+        cell.widget.chart.on('drawing:change', () => setDrawRevision(value => value + 1)),
+        cell.widget.chart.on('draw:add', () => setDrawRevision(value => value + 1)),
+        cell.widget.chart.on('draw:update', () => setDrawRevision(value => value + 1)),
+        cell.widget.chart.on('draw:remove', () => setDrawRevision(value => value + 1)),
       ])
     }
     const attachAllCells = () => {
@@ -977,6 +984,12 @@ export default function App() {
         <div className="chart-frame">
           <div ref={chartRef} className="chart-host" aria-label="Interactive market chart" />
         </div>
+        {widgetReady && (
+          <DrawingManagerPanel
+            draw={gridRef.current?.active().widget.draw}
+            revision={drawRevision}
+          />
+        )}
         {mode === 'option' && market === 'INDEX' && <div className="metrics-bar">
           <Metric label="LAST PREMIUM" value={fmt(latest?.ltp)} />
           <Metric label="OPEN INTEREST" value={fmtInt(latest?.oi)} />
