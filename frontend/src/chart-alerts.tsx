@@ -48,6 +48,9 @@ export function ChartAlertsPanel({
   metrics?: OptionMetrics
 }) {
   const [rules, setRules] = useState<ChartAlertRule[]>(readRules)
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification === 'undefined' ? 'denied' : Notification.permission,
+  )
   const [metric, setMetric] = useState<AlertMetric>('ltp')
   const [operator, setOperator] = useState<AlertOperator>('above')
   const [threshold, setThreshold] = useState('')
@@ -63,14 +66,37 @@ export function ChartAlertsPanel({
   useEffect(() => {
     if (!metrics) return
     const now = new Date().toISOString()
-    setRules(previous => previous.map(rule => {
-      if (!rule.enabled || rule.firedAt || rule.symbol !== symbol) return rule
+    const fired = rules.filter(rule => {
+      if (!rule.enabled || rule.firedAt || rule.symbol !== symbol) return false
       const value = metricValue(metrics, rule.metric)
-      if (value === undefined) return rule
-      const crossed = rule.operator === 'above' ? value >= rule.threshold : value <= rule.threshold
-      return crossed ? { ...rule, firedAt: now, enabled: false } : rule
-    }))
-  }, [metrics, symbol])
+      if (value === undefined) return false
+      return rule.operator === 'above' ? value >= rule.threshold : value <= rule.threshold
+    })
+    if (!fired.length) return
+    const firedIds = new Set(fired.map(rule => rule.id))
+    setRules(previous => previous.map(rule =>
+      firedIds.has(rule.id) ? { ...rule, firedAt: now, enabled: false } : rule,
+    ))
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      for (const rule of fired) {
+        const value = metricValue(metrics, rule.metric)
+        try {
+          new Notification(`TradeThesis alert · ${symbol}`, {
+            body: `${displayMetric(rule.metric)} ${rule.operator === 'above' ? 'reached' : 'fell to'} ${value} (threshold ${rule.threshold})`,
+            tag: `tradethesis-${rule.id}`,
+          })
+        } catch {
+          // The in-app rule is still triggered if the browser blocks notifications.
+        }
+      }
+    }
+  }, [metrics, rules, symbol])
+
+  async function enableNotifications() {
+    if (typeof Notification === 'undefined') return
+    const result = await Notification.requestPermission()
+    setNotificationPermission(result)
+  }
 
   function addRule() {
     const value = Number(threshold)
@@ -96,7 +122,12 @@ export function ChartAlertsPanel({
     <section className="chart-alerts">
       <div className="analytics-title">
         <div><span className="eyebrow">CONDITION MONITORING</span><h2>Chart alerts</h2></div>
-        <span>LOCAL WORKSTATION · THIS BROWSER</span>
+        <div className="alert-notification-control">
+          <span>{notificationPermission === 'granted' ? 'BROWSER NOTIFICATIONS ENABLED' : notificationPermission === 'denied' ? 'IN-APP ALERTS ONLY' : 'BROWSER NOTIFICATIONS NOT ENABLED'}</span>
+          {notificationPermission !== 'granted' && notificationPermission !== 'denied' && (
+            <button type="button" onClick={() => void enableNotifications()}>Enable notifications</button>
+          )}
+        </div>
       </div>
       <div className="alert-create-row">
         <label><span>METRIC</span><select value={metric} onChange={e => setMetric(e.target.value as AlertMetric)}>
