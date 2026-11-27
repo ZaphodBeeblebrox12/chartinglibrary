@@ -58,8 +58,12 @@ function readFavorites(): string[] {
   }
 }
 
+const TOOL_LABELS: Record<string, string> = Object.fromEntries(
+  TOOL_GROUPS.flatMap(group => group.tools.map(([id, label]) => [id, label] as [string, string])),
+)
+
 function titleForTool(tool: string): string {
-  return TOOL_GROUPS.flatMap(group => group.tools).find(([id]) => id === tool)?.[1] ?? tool.replaceAll('-', ' ')
+  return TOOL_LABELS[tool] ?? tool.replaceAll('-', ' ')
 }
 
 export function DrawingManagerPanel({
