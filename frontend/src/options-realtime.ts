@@ -278,6 +278,7 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
             ...(finite(point?.gamma) === undefined ? {} : { gamma: finite(point?.gamma) }),
             ...(finite(point?.theta) === undefined ? {} : { theta: finite(point?.theta) }),
             ...(finite(point?.vega) === undefined ? {} : { vega: finite(point?.vega) }),
+            ...(finite(point?.gex) === undefined ? {} : { gex: finite(point?.gex) }),
             ...(sourceAge === undefined ? {} : { sourceAgeSec: sourceAge }),
           })
           const time = istTimestampToUtcSeconds(timestamp)
