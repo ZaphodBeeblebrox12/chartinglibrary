@@ -82,17 +82,21 @@ function istMinuteOfDay(timestamp: string): number | undefined {
 function bucketStart(
   timestamp: string,
   interval: string,
+  exchange: string,
 ): { epoch: number; key: string } | undefined {
   const time = istMinuteOfDay(timestamp)
   const sourceEpoch = istTimestampToUtcSeconds(timestamp)
-  if (time === undefined || sourceEpoch === undefined || time < 555 || time > 930) return undefined
+  const isMcx = exchange === 'MCX'
+  const sessionOpen = isMcx ? 540 : 555
+  const sessionClose = isMcx ? 1435 : 930
+  if (time === undefined || sourceEpoch === undefined || time < sessionOpen || time > sessionClose) return undefined
   const minutesByInterval: Record<string, number> = {
     '1m': 1, '5m': 5, '15m': 15, '30m': 30, '1h': 60, '4h': 240, '1d': 1440,
   }
   const size = minutesByInterval[interval]
   if (!size) return undefined
-  const offset = time - 555
-  const startMinute = size === 1440 ? 555 : 555 + Math.floor(offset / size) * size
+  const offset = time - sessionOpen
+  const startMinute = size === 1440 ? sessionOpen : sessionOpen + Math.floor(offset / size) * size
   const date = timestamp.slice(0, 10)
   const label = `${date} ${String(Math.floor(startMinute / 60)).padStart(2, '0')}:${String(startMinute % 60).padStart(2, '0')}:00`
   const epoch = istTimestampToUtcSeconds(label)
@@ -142,7 +146,7 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
       status(onStatus, 'disconnected', 'Live option streaming is currently available for NIFTY and SENSEX only')
       return () => undefined
     }
-    if (!isOption && !['NSE', 'BSE'].includes(exchange)) {
+    if (!isOption && !['NSE', 'BSE', 'MCX'].includes(exchange)) {
       status(onStatus, 'disconnected', 'No live cash-candle stream for this exchange')
       return () => undefined
     }
@@ -212,7 +216,7 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
           const candle = (message as LiveCandleEvent).data
           if (!candle || candle.symbol?.toUpperCase() !== instrument || !candle.ts_minute) return
           if (!candle.ts_minute.startsWith(selectedDate)) return
-          const bucket = bucketStart(candle.ts_minute, request.interval)
+          const bucket = bucketStart(candle.ts_minute, request.interval, exchange)
           if (!bucket) return
           const open = finite(candle.open)
           const high = finite(candle.high)
