@@ -102,12 +102,12 @@ export function DrawingManagerPanel({
   }
 
   function setVisibility(item: Drawing) {
-    if (!draw || item.policy?.visible === false) return
+    if (!draw || item.policy?.editable === false) return
     draw.update(item.id, { visible: item.visible === false })
   }
 
   function setLock(item: Drawing) {
-    if (!draw || item.policy?.locked === false) return
+    if (!draw || item.policy?.editable === false) return
     draw.update(item.id, { locked: !item.locked })
   }
 
@@ -189,12 +189,12 @@ export function DrawingManagerPanel({
 
       <div className="drawing-object-head">
         <strong>Objects on active chart</strong>
-        <span>{allDrawings.length} drawings · {groups.length} groups</span>
+        <span>{allDrawings.filter(item => item.policy?.listed !== false).length} drawings · {groups.length} groups</span>
       </div>
-      {allDrawings.length === 0
+      {allDrawings.filter(item => item.policy?.listed !== false).length === 0
         ? <p className="drawing-empty">No drawings on this chart. Choose a favorite or open All tools to start annotating.</p>
         : <div className="drawing-object-list">
-          {allDrawings.map(item => (
+          {allDrawings.filter(item => item.policy?.listed !== false).map(item => (
             <div className={'drawing-object ' + (selectedIds.includes(item.id) ? 'selected' : '')} key={item.id}>
               <input type="checkbox" checked={selectedIds.includes(item.id)}
                 onChange={() => toggleSelected(item.id)} aria-label={`Select ${titleForTool(item.tool)}`} />
@@ -203,15 +203,15 @@ export function DrawingManagerPanel({
                 <small>{item.tool} · pane {item.paneIndex + 1}</small>
               </button>
               <button type="button" title={item.visible === false ? 'Show object' : 'Hide object'}
-                disabled={item.policy?.visible === false} onClick={() => setVisibility(item)}>
+                disabled={item.policy?.editable === false} onClick={() => setVisibility(item)}>
                 {item.visible === false ? 'Show' : 'Hide'}
               </button>
               <button type="button" title={item.locked ? 'Unlock object' : 'Lock object'}
-                disabled={item.policy?.locked === false} onClick={() => setLock(item)}>
+                disabled={item.policy?.editable === false} onClick={() => setLock(item)}>
                 {item.locked ? 'Unlock' : 'Lock'}
               </button>
               <button type="button" title="Delete object"
-                disabled={item.policy?.removable === false} onClick={() => draw?.remove(item.id)}>×</button>
+                disabled={item.policy?.editable === false} onClick={() => draw?.remove(item.id)}>×</button>
             </div>
           ))}
         </div>}
