@@ -165,6 +165,10 @@ export default function App() {
   const gridRef = useRef<ChartGrid | null>(null)
   const cellSubscriptions = useRef(new Map<string, Array<() => void>>())
 
+  const mergeLiveMetrics = (metrics: OptionMetrics) => {
+    setLiveMetrics(previous => ({ ...previous, ...metrics }))
+  }
+
   const onFeedResult = (result: FeedResult) => {
     setFeed(result)
     if (result.connection === 'connected') setApiState('connected')
@@ -189,7 +193,7 @@ export default function App() {
     theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
-    onLiveMetrics: setLiveMetrics,
+    onLiveMetrics: mergeLiveMetrics,
   })
   contextRef.current = {
     market,
@@ -209,7 +213,7 @@ export default function App() {
     theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
-    onLiveMetrics: setLiveMetrics,
+    onLiveMetrics: mergeLiveMetrics,
   }
 
   useEffect(() => {
@@ -381,12 +385,12 @@ export default function App() {
           ...contextRef.current,
           onResult: (result) => { if (gridRef.current?.active().id === id) onFeedResult(result) },
           onLiveStatus: (status) => { if (gridRef.current?.active().id === id) setRealtimeStatus(status) },
-          onLiveMetrics: (metrics) => { if (gridRef.current?.active().id === id) setLiveMetrics(metrics) },
+          onLiveMetrics: (metrics) => { if (gridRef.current?.active().id === id) mergeLiveMetrics(metrics) },
         }),
         new OptionsDashboardRealtimeProvider(
           () => contextRef.current.date,
           (metrics) => {
-            if (gridRef.current?.active().id === id) setLiveMetrics(metrics)
+            if (gridRef.current?.active().id === id) mergeLiveMetrics(metrics)
           },
         ),
       ),
