@@ -177,6 +177,8 @@ export default function App() {
     selectedCashInstrument,
     selectedCashExchange,
     cashInstruments,
+    globalSymbol,
+    globalInstruments,
     index,
     strike,
     side,
@@ -195,6 +197,8 @@ export default function App() {
     selectedCashInstrument,
     selectedCashExchange,
     cashInstruments,
+    globalSymbol,
+    globalInstruments,
     index,
     strike,
     side,
@@ -222,16 +226,43 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
+    fetchGlobalMarketInstruments(controller.signal).then(items => {
+      if (controller.signal.aborted) return
+      setGlobalInstruments(items)
+      setGlobalSymbol(current => current || items[0]?.name || 'EURUSD')
+      if (!items.some(item => item.name === globalSymbol) && items.length) {
+        const preferred = items.find(item => item.name === 'EURUSD') ?? items[0]
+        setGlobalSymbol(preferred.name)
+        setGlobalType(preferred.type)
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : 'Biquote catalogue unavailable')
+    })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
     if (market === 'BTC') {
       setDates([])
       setApiState('checking')
       setMessage(`Connecting to ${cryptoExchange} public BTC/USDT market data`)
       return
     }
-    if (market === 'STOCK') {
+    if (market === 'STOCK' || market === 'COMMODITY') {
       setDates([])
       setApiState('connected')
-      setMessage(`${cashInstruments.length} configured cash instruments available`)
+      setMessage(market === 'COMMODITY'
+        ? `${cashInstruments.filter(item => item.kind === 'COMMODITY').length} configured MCX futures instruments available`
+        : `${cashInstruments.filter(item => item.kind === 'STOCK').length} configured NSE cash instruments available`)
+      return
+    }
+    if (market === 'GLOBAL') {
+      setDates([])
+      setApiState(globalInstruments.length ? 'connected' : 'offline')
+      setMessage(globalInstruments.length
+        ? 'Biquote global market catalogue ready'
+        : 'Biquote global market catalogue unavailable')
       return
     }
 
@@ -250,7 +281,7 @@ export default function App() {
       setDates([])
     })
     return () => controller.abort()
-  }, [market, index, cryptoExchange, cashInstruments.length])
+  }, [market, index, cryptoExchange, cashInstruments.length, globalInstruments.length])
 
   useEffect(() => {
     if (market !== 'INDEX' || mode !== 'option') return
