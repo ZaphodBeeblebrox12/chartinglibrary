@@ -232,6 +232,34 @@ export default function App() {
   }, [market, mode, index, date, expiry])
 
   useEffect(() => {
+    if (market !== 'INDEX' || mode !== 'option') {
+      setCallHistory([])
+      setPutHistory([])
+      setChain(undefined)
+      return
+    }
+    const controller = new AbortController()
+    setChain(undefined)
+    Promise.all([
+      fetchOptionHistory(index, strike, 'CE', expiry, date, controller.signal),
+      fetchOptionHistory(index, strike, 'PE', expiry, date, controller.signal),
+      fetchOptionChain(index, expiry, date, controller.signal),
+    ]).then(([ce, pe, chainResult]) => {
+      if (controller.signal.aborted) return
+      setCallHistory(ce.points)
+      setPutHistory(pe.points)
+      setChain(chainResult)
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return
+      setCallHistory([])
+      setPutHistory([])
+      setChain(undefined)
+      setMessage(error instanceof Error ? error.message : 'Unable to load option analytics')
+    })
+    return () => controller.abort()
+  }, [market, mode, index, strike, date, expiry])
+
+  useEffect(() => {
     const container = chartRef.current
     if (!container) return
     const initial = contextRef.current
@@ -392,7 +420,51 @@ export default function App() {
     }
   }, [widgetReady, market, mode, index, strike, side, cryptoExchange, date, expiry, interval, theme])
 
-  const latest = feed?.latest
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WORKSPACES_STORAGE_KEY, JSON.stringify(workspaces))
+    } catch {
+      setMessage('Workspace storage is unavailable in this browser')
+    }
+  }, [workspaces])
+
+  function saveWorkspace() {
+    const name = workspaceName.trim()
+    if (!name) return
+    const snapshot: SavedContext = {
+      market, mode, index, strike, side, cryptoExchange,
+      date, expiry, interval, theme,
+    }
+    setWorkspaces(previous => ({ ...previous, [name]: snapshot }))
+    setActiveWorkspace(name)
+    setWorkspaceName('')
+  }
+
+  function loadWorkspace(name: string) {
+    const snapshot = workspaces[name]
+    if (!snapshot) return
+    setMarket(snapshot.market ?? 'INDEX')
+    setMode(snapshot.mode ?? 'underlying')
+    setIndex(snapshot.index ?? 'NIFTY')
+    setStrike(snapshot.strike ?? 25000)
+    setSide(snapshot.side ?? 'CE')
+    setCryptoExchange(snapshot.cryptoExchange ?? 'BINANCE')
+    setDate(snapshot.date ?? todayIST())
+    setExpiry(snapshot.expiry ?? 'UNKNOWN')
+    setInterval(snapshot.interval ?? '5m')
+    setTheme(snapshot.theme ?? 'light')
+    setFeed(undefined)
+    setLiveMetrics(undefined)
+    setRealtimeStatus({ state: 'disconnected' })
+    setActiveWorkspace(name)
+  }
+
+  const latest = liveMetrics ?? feed?.latest
+  const currentSymbol = market === 'BTC'
+    ? cryptoSymbol(cryptoExchange)
+    : mode === 'option'
+      ? optionSymbol(index, strike, side, expiry)
+      : index
   const tone = feed?.source === 'demo' ? 'warning'
     : feed?.source === 'empty' || feed?.source === 'unsupported' ? 'muted' : 'positive'
   const today = market === 'BTC' ? todayUTC() : todayIST()
