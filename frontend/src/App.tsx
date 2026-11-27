@@ -279,10 +279,6 @@ export default function App() {
       ? initial.cryptoExchange
       : exchangeFor(initial.index, initial.mode === 'option')
 
-    const realtimeProvider = new OptionsDashboardRealtimeProvider(
-      () => contextRef.current.date,
-      (metrics) => contextRef.current.onLiveMetrics?.(metrics),
-    )
     const grid = createChartGrid(container, {
       feed: ({ id }) => new TradeThesisDataFeed(
         () => ({
@@ -291,7 +287,12 @@ export default function App() {
           onLiveStatus: (status) => { if (gridRef.current?.active().id === id) setRealtimeStatus(status) },
           onLiveMetrics: (metrics) => { if (gridRef.current?.active().id === id) setLiveMetrics(metrics) },
         }),
-        realtimeProvider,
+        new OptionsDashboardRealtimeProvider(
+          () => contextRef.current.date,
+          (metrics) => {
+            if (gridRef.current?.active().id === id) setLiveMetrics(metrics)
+          },
+        ),
       ),
       symbol: initialSymbol,
       exchange: initialExchange,
@@ -615,6 +616,26 @@ export default function App() {
           setDate(today)
         }}>Today</button>
         <div className="workspace-controls">
+          <label className="toolbar-group grid-layout-control">
+            <span className="toolbar-caption">CHARTS</span>
+            <select className="control-select grid-layout-select" value={gridPreset}
+              onChange={(event) => {
+                const preset = event.target.value as ChartGridLayoutId
+                try {
+                  gridRef.current?.setPreset(preset)
+                  setGridPreset(preset)
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : 'Unable to change chart layout')
+                }
+              }}>
+              <option value="1x1">1 Chart</option>
+              <option value="1x2">2 Side by side</option>
+              <option value="2x1">2 Stacked</option>
+              <option value="2x2">4 Charts</option>
+              <option value="2x3">6 Charts</option>
+              <option value="3x2">6 Wide</option>
+            </select>
+          </label>
           <input className="control-input workspace-name" value={workspaceName}
             onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Workspace name" />
           <button className="today-button" onClick={saveWorkspace} disabled={!workspaceName.trim()}>Save</button>
