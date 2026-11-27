@@ -352,16 +352,22 @@ export default function App() {
     const initial = contextRef.current
     const initialSymbol = initial.market === 'BTC'
       ? cryptoSymbol(initial.cryptoExchange)
-      : initial.market === 'STOCK'
-        ? initial.selectedCashInstrument
-        : initial.mode === 'option'
+      : initial.market === 'GLOBAL'
+        ? initial.globalSymbol
+        : initial.market === 'STOCK' || initial.market === 'COMMODITY'
+          ? initial.selectedCashInstrument
+          : initial.mode === 'option'
         ? optionSymbol(initial.index, initial.strike, initial.side, initial.expiry)
         : initial.index
     const initialExchange = initial.market === 'BTC'
       ? initial.cryptoExchange
-      : initial.market === 'STOCK'
-        ? initial.selectedCashExchange
-        : exchangeFor(initial.index, initial.mode === 'option')
+      : initial.market === 'GLOBAL'
+        ? 'BIQUOTE'
+        : initial.market === 'COMMODITY'
+          ? 'MCX'
+          : initial.market === 'STOCK'
+            ? initial.selectedCashExchange
+            : exchangeFor(initial.index, initial.mode === 'option')
 
     const grid = createChartGrid(container, {
       feed: ({ id }) => new TradeThesisDataFeed(
@@ -411,8 +417,17 @@ export default function App() {
       } else if (exchange === 'BINANCE' || exchange === 'OKX' || symbol === 'BTCUSDT' || symbol === 'BTC-USDT') {
         setMarket('BTC'); setMode('underlying')
         setCryptoExchange(exchange === 'OKX' ? 'OKX' : 'BINANCE')
+      } else if (exchange === 'BIQUOTE') {
+        setMarket('GLOBAL'); setMode('underlying')
+        setGlobalSymbol(symbol)
+        const match = globalInstruments.find(item => item.name === symbol)
+        if (match) setGlobalType(match.type)
       } else if (symbol === 'NIFTY' || symbol === 'SENSEX') {
         setMarket('INDEX'); setMode('underlying'); setIndex(symbol)
+      } else if (exchange === 'MCX') {
+        setMarket('COMMODITY'); setMode('underlying')
+        setSelectedCashInstrument(symbol)
+        setSelectedCashExchange('MCX')
       } else if (['NSE', 'BSE'].includes(exchange)) {
         setMarket('STOCK'); setMode('underlying')
         setSelectedCashInstrument(symbol)
@@ -477,16 +492,22 @@ export default function App() {
       if (grid.isDestroyed) return
       const symbol = market === 'BTC'
         ? cryptoSymbol(cryptoExchange)
-        : market === 'STOCK'
-          ? selectedCashInstrument
-          : mode === 'option'
+        : market === 'GLOBAL'
+          ? globalSymbol
+          : market === 'STOCK' || market === 'COMMODITY'
+            ? selectedCashInstrument
+            : mode === 'option'
             ? optionSymbol(index, strike, side, expiry)
             : index
       const exchange = market === 'BTC'
         ? cryptoExchange
-        : market === 'STOCK'
-          ? selectedCashExchange
-          : exchangeFor(index, mode === 'option')
+        : market === 'GLOBAL'
+          ? 'BIQUOTE'
+          : market === 'COMMODITY'
+            ? 'MCX'
+            : market === 'STOCK'
+              ? selectedCashExchange
+              : exchangeFor(index, mode === 'option')
       const symbolChanged = widget.symbol() !== symbol || widget.exchange() !== exchange
       const intervalChanged = widget.interval() !== interval
       if (symbolChanged) widget.setSymbol(symbol, exchange)
@@ -498,7 +519,7 @@ export default function App() {
     }).catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : 'Unable to update chart')
     })
-  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval])
+  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, globalSymbol, date, expiry, interval])
 
   useEffect(() => {
     if (!widgetReady) return
@@ -512,14 +533,14 @@ export default function App() {
   useEffect(() => {
     if (!widgetReady) return
     const stored: SavedContext = {
-      market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval, theme,
+      market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, globalSymbol, globalType, date, expiry, interval, theme,
     }
     try {
       window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify(stored))
     } catch {
       setMessage('Browser storage is unavailable; current session preferences will not persist')
     }
-  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval, theme])
+  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, globalSymbol, globalType, date, expiry, interval, theme])
 
   useEffect(() => {
     try {
@@ -535,6 +556,7 @@ export default function App() {
     const snapshot: SavedContext = {
       market, mode, index, strike, side, cryptoExchange,
       selectedCashInstrument, selectedCashExchange,
+      globalSymbol, globalType,
       date, expiry, interval, theme,
     }
     const currentGrid = gridRef.current
@@ -559,11 +581,13 @@ export default function App() {
     setCryptoExchange(snapshot.cryptoExchange ?? 'BINANCE')
     setSelectedCashInstrument(snapshot.selectedCashInstrument ?? cashInstruments[0]?.name ?? '')
     setSelectedCashExchange(snapshot.selectedCashExchange ?? 'NSE')
-    setDate(snapshot.date ?? todayIST())
+    setGlobalSymbol(snapshot.globalSymbol ?? 'EURUSD')
+    setGlobalType(snapshot.globalType ?? 'Forex')
+    setDate(snapshot.date ?? (snapshot.market === 'GLOBAL' || snapshot.market === 'BTC' ? todayUTC() : todayIST()))
     setExpiry(snapshot.expiry ?? 'UNKNOWN')
     setInterval(snapshot.interval ?? '5m')
     setTheme(snapshot.theme ?? 'light')
-    gridRef.current?.applyWorkspace(savedWorkspace.grid)
+    if (savedWorkspace.grid) gridRef.current?.applyWorkspace(savedWorkspace.grid)
     setFeed(undefined)
     setLiveMetrics(undefined)
     setRealtimeStatus({ state: 'disconnected' })
