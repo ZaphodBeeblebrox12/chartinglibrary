@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { OptionMetrics } from './data'
 
-type AlertMetric = 'ltp' | 'oi' | 'oiChange' | 'iv' | 'delta' | 'gamma' | 'theta' | 'vega'
+type AlertMetric = 'ltp' | 'spot' | 'sma20' | 'ema20' | 'rsi14' | 'oi' | 'oiChange' | 'iv' | 'delta' | 'gamma' | 'theta' | 'vega'
 type AlertOperator = 'above' | 'below'
 
 interface ChartAlertRule {
@@ -34,7 +34,9 @@ function metricValue(metrics: OptionMetrics | undefined, key: AlertMetric): numb
 
 function displayMetric(key: AlertMetric): string {
   return ({
-    ltp: 'Premium', oi: 'Open interest', oiChange: 'OI change',
+    ltp: 'Last price / premium', spot: 'Underlying spot',
+    sma20: 'SMA 20', ema20: 'EMA 20', rsi14: 'RSI 14',
+    oi: 'Open interest', oiChange: 'OI change',
     iv: 'Implied volatility', delta: 'Delta', gamma: 'Gamma',
     theta: 'Theta', vega: 'Vega',
   })[key]
@@ -131,8 +133,9 @@ export function ChartAlertsPanel({
       </div>
       <div className="alert-create-row">
         <label><span>METRIC</span><select value={metric} onChange={e => setMetric(e.target.value as AlertMetric)}>
-          <option value="ltp">Premium</option><option value="oi">Open interest</option>
-          <option value="oiChange">OI change</option><option value="iv">Implied volatility</option>
+          <option value="ltp">Last price / premium</option><option value="spot">Underlying spot</option>
+          <option value="sma20">SMA 20</option><option value="ema20">EMA 20</option><option value="rsi14">RSI 14</option>
+          <option value="oi">Open interest</option><option value="oiChange">OI change</option><option value="iv">Implied volatility</option>
           <option value="delta">Delta</option><option value="gamma">Gamma</option>
           <option value="theta">Theta</option><option value="vega">Vega</option>
         </select></label>
