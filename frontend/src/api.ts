@@ -2,6 +2,13 @@ export type IndexName = 'NIFTY' | 'SENSEX'
 export type OptionSide = 'CE' | 'PE'
 export type CryptoExchange = 'BINANCE' | 'OKX'
 
+export interface TrackedCashInstrument {
+  name: string
+  kind: string
+  tier: number
+  exchange: string
+}
+
 export interface CryptoCandleRow {
   time: number
   open: number
@@ -132,7 +139,7 @@ export async function fetchAvailableDates(
 }
 
 export async function fetchUnderlyingCandles(
-  index: IndexName,
+  index: string,
   interval: string,
   date: string,
   signal?: AbortSignal,
@@ -241,4 +248,23 @@ export async function fetchOptionChain(
     `/api/chart/options/chain?${params.toString()}`,
     signal,
   )
+}
+
+export async function fetchTrackedCashInstruments(
+  signal?: AbortSignal,
+): Promise<TrackedCashInstrument[]> {
+  const payload = await getJson<{
+    instruments?: Array<{ name?: string; kind?: string; tier?: number; exchange?: string }>
+  }>('/api/instruments', signal)
+  if (!Array.isArray(payload.instruments)) return []
+  return payload.instruments
+    .filter(item => item.name && (item.kind ?? '').toLowerCase() === 'stock')
+    .map(item => ({
+      name: String(item.name).toUpperCase(),
+      kind: String(item.kind ?? 'stock').toUpperCase(),
+      tier: Number(item.tier ?? 2),
+      exchange: String(item.exchange ?? 'NSE').toUpperCase(),
+    }))
+    .filter((item, index, all) => all.findIndex(other => other.name === item.name) === index)
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
