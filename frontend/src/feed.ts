@@ -10,6 +10,7 @@ import {
   type GlobalMarketInstrument,
 } from './api'
 import {
+  calculateTechnicalMetrics,
   createFixtureBars,
   mapCryptoCandles,
   mapOptionSnapshots,
@@ -79,6 +80,26 @@ function exchangeForIndex(index: IndexName, option: boolean): string {
   return index === 'NIFTY' ? 'NSE' : 'BSE'
 }
 
+function metricHistoryHandler(
+  context: FeedContext,
+  onBar: (bar: Bar, meta?: LiveBarMeta) => void,
+): (bar: Bar, meta?: LiveBarMeta) => void {
+  const rolling: Bar[] = []
+  return (bar, meta) => {
+    const last = rolling[rolling.length - 1]
+    if (last && last.time === bar.time) rolling[rolling.length - 1] = bar
+    else rolling.push(bar)
+    if (rolling.length > 250) rolling.splice(0, rolling.length - 250)
+    onBar(bar, meta)
+    const timestamp = new Date(bar.time * 1000).toISOString()
+    context.onLiveMetrics?.({
+      timestamp,
+      ltp: bar.close,
+      ...calculateTechnicalMetrics(rolling),
+    })
+  }
+}
+
 export class TradeThesisDataFeed implements DataFeed {
   public subscribeBars?: (
     request: BarsRequest,
@@ -99,19 +120,14 @@ export class TradeThesisDataFeed implements DataFeed {
     this.subscribeBars = (request, onBar, opts) => {
       const context = this.getContext()
       const exchange = request.exchange.toUpperCase()
+      const onMetricBar = metricHistoryHandler(context, onBar)
       if (exchange === 'BINANCE' || exchange === 'OKX') {
         const selectedDate = dateFromScope(request.variant?.unit, context.date)
         return subscribeCryptoBars(
           exchange,
           request,
           selectedDate,
-          (bar, meta) => {
-            onBar(bar, meta)
-            context.onLiveMetrics?.({
-              timestamp: new Date(bar.time * 1000).toISOString(),
-              ltp: bar.close,
-            })
-          },
+          onMetricBar,
           (status) => context.onLiveStatus?.(status),
         )
       }
@@ -126,7 +142,7 @@ export class TradeThesisDataFeed implements DataFeed {
           instrument,
           request,
           selectedDate,
-          (bar, meta) => onBar(bar, meta),
+          onMetricBar,
           (status) => context.onLiveStatus?.(status),
           (price, timestamp) => context.onLiveMetrics?.({ timestamp, ltp: price }),
         )
@@ -134,7 +150,7 @@ export class TradeThesisDataFeed implements DataFeed {
       if (realtimeProvider) {
         return realtimeProvider.subscribeBars(
           request,
-          onBar,
+          onMetricBar,
           (status) => this.getContext().onLiveStatus?.(status),
           opts,
         )
@@ -206,6 +222,11 @@ export class TradeThesisDataFeed implements DataFeed {
             ? `Indicative ${instrument?.type ?? 'global market'} mid-price OHLC · tick volume is not exchange-traded volume · ${bars.length} bars`
             : `No Biquote OHLC data returned for ${request.symbol} on ${selectedDate}. The provider only retains rolling history.`,
           barCount: bars.length,
+          latest: bars.length ? {
+            timestamp: new Date(bars[bars.length - 1].time * 1000).toISOString(),
+            ltp: bars[bars.length - 1].close,
+            ...calculateTechnicalMetrics(bars),
+          } : undefined,
         })
         return bars
       }
@@ -246,7 +267,10 @@ export class TradeThesisDataFeed implements DataFeed {
               ].filter(Boolean).join(' · ')
             : `No ${index} ${strike} ${side} observations were found for ${selectedDate}.`,
           barCount: bars.length,
-          latest: mapped.latest,
+          latest: mapped.latest ? {
+            ...mapped.latest,
+            ...calculateTechnicalMetrics(bars),
+          } : undefined,
         })
         return bars
       }
@@ -268,6 +292,11 @@ export class TradeThesisDataFeed implements DataFeed {
           ? `Tick-built ${requestSymbol} OHLC · volume is not supplied by this cash feed`
           : `No ${requestSymbol} candles were found for ${selectedDate} at ${request.interval}.`,
         barCount: bars.length,
+        latest: bars.length ? {
+          timestamp: new Date(bars[bars.length - 1].time * 1000).toISOString(),
+          ltp: bars[bars.length - 1].close,
+          ...calculateTechnicalMetrics(bars),
+        } : undefined,
       })
       return bars
     } catch (error) {
