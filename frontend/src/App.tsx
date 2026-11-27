@@ -309,6 +309,7 @@ export default function App() {
     const off = [
       widget.on('symbol', ({ symbol, exchange }) => {
         setFeed(undefined)
+        setLiveMetrics(undefined)
         setRealtimeStatus({ state: 'disconnected' })
         const contract = parseOptionSymbol(symbol)
         const venue = exchange.toUpperCase()
@@ -478,6 +479,7 @@ export default function App() {
     setIndex(next)
     setInterval('5m')
     setFeed(undefined)
+    setLiveMetrics(undefined)
   }
 
   function chooseOption(nextSide: OptionSide) {
@@ -486,6 +488,7 @@ export default function App() {
     setSide(nextSide)
     setInterval('1m')
     setFeed(undefined)
+    setLiveMetrics(undefined)
   }
 
   function chooseCrypto(exchange: CryptoExchange = cryptoExchange) {
@@ -495,6 +498,7 @@ export default function App() {
     setDate(todayUTC())
     setInterval('5m')
     setFeed(undefined)
+    setLiveMetrics(undefined)
     setRealtimeStatus({ state: 'disconnected' })
   }
 
@@ -586,11 +590,27 @@ export default function App() {
           <span className="toolbar-caption">{market === 'BTC' ? 'DATE (UTC)' : 'SESSION'}</span>
           <input className="control-input" type="date" value={date} max={today} onChange={(event) => {
             setFeed(undefined)
+            setLiveMetrics(undefined)
             setRealtimeStatus({ state: 'disconnected' })
             setDate(event.target.value)
           }} />
         </label>
-        <button className="today-button" disabled={date === today} onClick={() => setDate(today)}>Today</button>
+        <button className="today-button" disabled={date === today} onClick={() => {
+          setFeed(undefined)
+          setLiveMetrics(undefined)
+          setDate(today)
+        }}>Today</button>
+        <div className="workspace-controls">
+          <input className="control-input workspace-name" value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Workspace name" />
+          <button className="today-button" onClick={saveWorkspace} disabled={!workspaceName.trim()}>Save</button>
+          <select className="control-select workspace-select" value={activeWorkspace}
+            onChange={(event) => setActiveWorkspace(event.target.value)}>
+            <option value="">Saved layouts</option>
+            {Object.keys(workspaces).sort().map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <button className="today-button" onClick={() => loadWorkspace(activeWorkspace)} disabled={!activeWorkspace}>Load</button>
+        </div>
       </section>
 
       <section className="status-strip">
@@ -635,6 +655,18 @@ export default function App() {
           <Metric label="THETA" value={fmt(latest?.theta, 3)} />
           <Metric label="VEGA" value={fmt(latest?.vega, 3)} />
         </div>}
+        {market === 'INDEX' && mode === 'option' && (
+          <OptionAnalyticsPanel
+            callHistory={callHistory}
+            putHistory={putHistory}
+            chain={chain}
+            selectedStrike={strike}
+            selectedSide={side}
+          />
+        )}
+        {market === 'INDEX' && (
+          <ChartAlertsPanel symbol={currentSymbol} metrics={latest} />
+        )}
         <div className="chart-footnote">
           <span>TRADETHESIS CHARTING ENGINE</span>
           <span>{message}</span>
