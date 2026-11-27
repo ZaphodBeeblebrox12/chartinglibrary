@@ -19,6 +19,7 @@ export interface OptionMetrics {
   vega?: number
   gex?: number
   sourceAgeSec?: number
+  spot?: number
   sma20?: number
   ema20?: number
   rsi14?: number
@@ -213,6 +214,7 @@ export function mapOptionSnapshots(
     latest = {
       timestamp: row.timestamp,
       ltp,
+      ...(finiteNumber(row.spot) === undefined ? {} : { spot: finiteNumber(row.spot) }),
       ...(oi === undefined ? {} : { oi }),
       ...(finiteNumber(row.oi_change) === undefined ? {} : { oiChange: finiteNumber(row.oi_change) }),
       ...(volume === undefined || row.volume_valid !== true ? {} : { volume }),
