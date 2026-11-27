@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChartGrid, type ChartGrid, type ChartGridLayoutId } from 'openalgo-charts/widget'
+import { WorkspaceRepository, createIndexedDbWorkspaceStorage } from 'openalgo-charts/workspace'
 import 'openalgo-charts/indicators'
 import {
   fetchAvailableDates,
@@ -389,6 +390,31 @@ export default function App() {
       interval: initial.interval ?? '5m',
       variant: { unit: feedScopeKey(initial) },
       intervals: ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'],
+      canSelectInterval: (code) => {
+        const exchange = gridRef.current?.active().widget.exchange().toUpperCase() ?? initialExchange.toUpperCase()
+        const activeSymbol = gridRef.current?.active().widget.symbol() ?? initialSymbol
+        const option = parseOptionSymbol(activeSymbol) !== undefined
+        if (option) return code === '1m'
+        if (exchange === 'BINANCE' || exchange === 'OKX') {
+          const allowed = exchange === 'BINANCE'
+            ? ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d']
+            : ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d']
+          return allowed.includes(code)
+        }
+        if (exchange === 'BIQUOTE') return ['1m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(code)
+        return ['1m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(code)
+      },
+      workspaces: (() => {
+        try {
+          return new WorkspaceRepository(
+            createIndexedDbWorkspaceStorage(window.indexedDB),
+            'tradethesis-charts',
+          )
+        } catch {
+          setMessage('IndexedDB workspace storage is unavailable')
+          return undefined
+        }
+      })(),
       theme: initial.theme ?? 'light',
       chartType: initial.mode === 'option' ? 'line' : 'candlestick',
       preset: '1x1',
