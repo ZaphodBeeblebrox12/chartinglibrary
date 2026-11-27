@@ -176,6 +176,9 @@ export default function App() {
     market,
     mode,
     cryptoExchange,
+    selectedCashInstrument,
+    selectedCashExchange,
+    cashInstruments,
     index,
     strike,
     side,
@@ -203,10 +206,16 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (market === 'BTC' || market === 'STOCK') {
+    if (market === 'BTC') {
       setDates([])
       setApiState('checking')
       setMessage(`Connecting to ${cryptoExchange} public BTC/USDT market data`)
+      return
+    }
+    if (market === 'STOCK') {
+      setDates([])
+      setApiState('connected')
+      setMessage(`${cashInstruments.length} configured cash instruments available`)
       return
     }
 
@@ -225,7 +234,7 @@ export default function App() {
       setDates([])
     })
     return () => controller.abort()
-  }, [market, index, cryptoExchange])
+  }, [market, index, cryptoExchange, cashInstruments.length])
 
   useEffect(() => {
     if (market !== 'INDEX' || mode !== 'option') return
@@ -527,7 +536,7 @@ export default function App() {
   const today = market === 'BTC' ? todayUTC() : todayIST()
   const providerLabel = market === 'BTC'
     ? (cryptoExchange === 'BINANCE' ? 'BINANCE SPOT' : 'OKX SPOT')
-    : 'DATABASE CONNECTED'
+    : market === 'STOCK' ? 'CASH DATABASE' : 'DATABASE CONNECTED'
 
   function chooseUnderlying(next: IndexName) {
     setMarket('INDEX')
@@ -600,9 +609,21 @@ export default function App() {
           <div className="segmented">
             <button className={market === 'INDEX' && index === 'NIFTY' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('NIFTY')}>NIFTY</button>
             <button className={market === 'INDEX' && index === 'SENSEX' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('SENSEX')}>SENSEX</button>
+            <button className={market === 'STOCK' ? 'selected' : ''} onClick={() => chooseStock(selectedCashInstrument || cashInstruments[0]?.name || '')}>STOCKS</button>
             <button className={market === 'BTC' ? 'selected' : ''} onClick={() => chooseCrypto()}>BTC</button>
           </div>
         </div>
+        {market === 'STOCK' && <>
+          <span className="toolbar-divider" />
+          <label className="toolbar-group">
+            <span className="toolbar-caption">CASH INSTRUMENT</span>
+            <select className="control-select stock-select" value={selectedCashInstrument}
+              onChange={(event) => chooseStock(event.target.value)}>
+              {cashInstruments.map(item => <option key={item.name} value={item.name}>{item.name} · {item.exchange}</option>)}
+              {!cashInstruments.length && <option value="">No tracked stocks</option>}
+            </select>
+          </label>
+        </>}
         {market === 'BTC' && <>
           <span className="toolbar-divider" />
           <label className="toolbar-group">
@@ -620,11 +641,13 @@ export default function App() {
           <div className="segmented">
             {market === 'BTC'
               ? <button className="selected">Spot</button>
-              : <>
-                <button className={mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying(index)}>Underlying</button>
-                <button className={mode === 'option' && side === 'CE' ? 'selected call' : ''} onClick={() => chooseOption('CE')}>Call</button>
-                <button className={mode === 'option' && side === 'PE' ? 'selected put' : ''} onClick={() => chooseOption('PE')}>Put</button>
-              </>}
+              : market === 'STOCK'
+                ? <button className="selected">Cash</button>
+                : <>
+                  <button className={mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying(index)}>Underlying</button>
+                  <button className={mode === 'option' && side === 'CE' ? 'selected call' : ''} onClick={() => chooseOption('CE')}>Call</button>
+                  <button className={mode === 'option' && side === 'PE' ? 'selected put' : ''} onClick={() => chooseOption('PE')}>Put</button>
+                </>}
           </div>
         </div>
         {mode === 'option' && market === 'INDEX' && <>
@@ -705,7 +728,7 @@ export default function App() {
         <div className={'source-indicator ' + tone}><span className="source-dot" /><strong>{feed?.label ?? 'Waiting for chart history'}</strong></div>
         <span className="status-detail">{feed?.detail ?? (market === 'BTC' ? 'Public BTC/USDT spot history and live market data' : 'Connect the local Options Dashboard API to load saved market data')}</span>
         <span className="status-spacer" />
-        <span>{market === 'BTC' ? '24/7 SPOT MARKET' : `${dates.length} saved sessions`}</span>
+        <span>{market === 'BTC' ? '24/7 SPOT MARKET' : market === 'STOCK' ? `${cashInstruments.length} configured cash symbols` : `${dates.length} saved sessions`}</span>
         <span className="status-divider" />
         <span className="status-live">{realtimeStatus.state === 'live' ? 'REALTIME STREAM CONNECTED' : realtimeStatus.state === 'connecting' ? 'CONNECTING LIVE STREAM' : realtimeStatus.state === 'reconnecting' ? 'RECONNECTING LIVE STREAM' : 'HISTORICAL MODE'}</span>
       </section>
@@ -713,17 +736,21 @@ export default function App() {
       <section className="workspace">
         <div className="chart-heading">
           <div>
-            <span className="eyebrow">{market === 'BTC' ? 'BITCOIN SPOT' : mode === 'option' ? 'OPTION PREMIUM' : 'INDEX SPOT'}</span>
+            <span className="eyebrow">{market === 'BTC' ? 'BITCOIN SPOT' : market === 'STOCK' ? 'INDIAN CASH EQUITY' : mode === 'option' ? 'OPTION PREMIUM' : 'INDEX SPOT'}</span>
             <h1>{market === 'BTC'
               ? 'BTC/USDT'
-              : mode === 'option' ? index + ' ' + fmtInt(strike) + ' ' + side : index}
-              <small>{market === 'BTC' ? cryptoExchange : exchangeFor(index, mode === 'option')}</small>
+              : market === 'STOCK'
+                ? selectedCashInstrument
+                : mode === 'option' ? index + ' ' + fmtInt(strike) + ' ' + side : index}
+              <small>{market === 'BTC' ? cryptoExchange : market === 'STOCK' ? selectedCashExchange : exchangeFor(index, mode === 'option')}</small>
             </h1>
             <p>{market === 'BTC'
               ? 'Exchange-specific spot OHLCV · 24/7 market · no account credentials'
-              : mode === 'option'
-                ? (expiry === 'UNKNOWN' ? 'Sampled LTP observations · historical expiry unknown' : 'Sampled LTP observations · expiry ' + expiry)
-                : 'Tick-built underlying OHLC · cash volume unavailable'}</p>
+              : market === 'STOCK'
+                ? 'Tick-built cash equity OHLC from the Options Dashboard streamer'
+                : mode === 'option'
+                  ? (expiry === 'UNKNOWN' ? 'Sampled LTP observations · historical expiry unknown' : 'Sampled LTP observations · expiry ' + expiry)
+                  : 'Tick-built underlying OHLC · cash volume unavailable'}</p>
           </div>
           <div className="chart-meta">
             <strong>{date}</strong>
