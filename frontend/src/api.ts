@@ -254,10 +254,26 @@ export async function fetchOptionChain(
   signal?: AbortSignal,
 ): Promise<OptionChainResponse> {
   const params = new URLSearchParams({ index, expiry, date })
-  return getJson<OptionChainResponse>(
+  const payload = await getJson<Partial<OptionChainResponse>>(
     `/api/chart/options/chain?${params.toString()}`,
     signal,
   )
+  // Older backend instances and test doubles may not expose the chain endpoint
+  // yet. Normalize the response so analytics panels render an explicit empty
+  // state instead of crashing on a missing strikes array.
+  return {
+    index_name: payload.index_name ?? index,
+    date: payload.date ?? date,
+    expiry: payload.expiry ?? (expiry === 'UNKNOWN' ? null : expiry),
+    ...(payload.expiry_known === undefined ? {} : { expiry_known: payload.expiry_known }),
+    asof: payload.asof ?? null,
+    spot: payload.spot ?? null,
+    strikes: Array.isArray(payload.strikes) ? payload.strikes : [],
+    analytics: payload.analytics && typeof payload.analytics === 'object'
+      ? payload.analytics
+      : {},
+    ...(payload.quality ? { quality: payload.quality } : {}),
+  }
 }
 
 export async function fetchTrackedCashInstruments(
