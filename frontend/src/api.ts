@@ -4,9 +4,19 @@ export type CryptoExchange = 'BINANCE' | 'OKX'
 
 export interface TrackedCashInstrument {
   name: string
-  kind: string
+  kind: 'STOCK' | 'COMMODITY'
   tier: number
+  exchange: 'NSE' | 'MCX'
+}
+
+export type GlobalAssetType = 'Forex' | 'Stock' | 'Crypto' | 'Index' | 'Commodity'
+
+export interface GlobalMarketInstrument {
+  name: string
+  description: string
+  type: GlobalAssetType
   exchange: string
+  source: string
 }
 
 export interface CryptoCandleRow {
@@ -258,13 +268,52 @@ export async function fetchTrackedCashInstruments(
   }>('/api/instruments', signal)
   if (!Array.isArray(payload.instruments)) return []
   return payload.instruments
-    .filter(item => item.name && (item.kind ?? '').toLowerCase() === 'stock')
-    .map(item => ({
-      name: String(item.name).toUpperCase(),
-      kind: String(item.kind ?? 'stock').toUpperCase(),
-      tier: Number(item.tier ?? 2),
-      exchange: String(item.exchange ?? 'NSE').toUpperCase(),
-    }))
+    .filter(item => item.name && ['stock', 'commodity'].includes((item.kind ?? '').toLowerCase()))
+    .map(item => {
+      const kind = String(item.kind ?? 'stock').toUpperCase() as 'STOCK' | 'COMMODITY'
+      return {
+        name: String(item.name).toUpperCase(),
+        kind,
+        tier: Number(item.tier ?? 2),
+        exchange: (kind === 'COMMODITY' ? 'MCX' : 'NSE') as 'NSE' | 'MCX',
+      }
+    })
     .filter((item, index, all) => all.findIndex(other => other.name === item.name) === index)
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function fetchGlobalMarketInstruments(
+  signal?: AbortSignal,
+): Promise<GlobalMarketInstrument[]> {
+  const response = await fetch(
+    'https://biquote.io/api/symbols?source=MT5&quotedWithinDays=7',
+    { headers: { Accept: 'application/json' }, signal },
+  )
+  if (!response.ok) {
+    throw new Error(`Global market catalogue returned HTTP ${response.status}`)
+  }
+  const payload = await response.json() as unknown
+  const rows = Array.isArray(payload)
+    ? payload
+    : ((payload as { symbols?: unknown[]; items?: unknown[]; data?: unknown[] })?.symbols ??
+       (payload as { items?: unknown[] })?.items ??
+       (payload as { data?: unknown[] })?.data ?? [])
+  if (!Array.isArray(rows)) return []
+  const supported = new Set<GlobalAssetType>(['Forex', 'Stock', 'Crypto', 'Index', 'Commodity'])
+  return rows.flatMap((value) => {
+    if (!value || typeof value !== 'object') return []
+    const row = value as Record<string, unknown>
+    const name = String(row.name ?? row.symbol ?? '').trim().toUpperCase()
+    const type = String(row.type ?? '').trim() as GlobalAssetType
+    if (!name || !supported.has(type)) return []
+    return [{
+      name,
+      description: String(row.description ?? name),
+      type,
+      exchange: String(row.exchange ?? row.source ?? 'Biquote'),
+      source: String(row.source ?? 'MT5'),
+    }]
+  }).filter((item, index, all) =>
+    all.findIndex(other => other.name === item.name) === index,
+  ).sort((a, b) => a.name.localeCompare(b.name))
 }
