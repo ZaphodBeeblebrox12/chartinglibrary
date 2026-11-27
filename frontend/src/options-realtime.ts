@@ -278,6 +278,10 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
         const spot = finite(data.spot)
         const age = finite(data.spot_age_sec)
         if (spot !== undefined && age !== undefined && age <= 90) {
+          this.onOptionMetrics?.({
+            timestamp: data.timestamp || new Date().toISOString(),
+            ltp: spot,
+          })
           lastRelevantAt = Date.now()
           status(onStatus, 'live')
         }
