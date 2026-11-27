@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { createWidget } from 'openalgo-charts/widget'
+import { createChartGrid, type ChartGrid, type ChartGridLayoutId } from 'openalgo-charts/widget'
 import 'openalgo-charts/indicators'
 import {
   fetchAvailableDates,
@@ -41,10 +41,15 @@ interface SavedContext {
 const CONTEXT_STORAGE_KEY = 'tradethesis-charts-context-v1'
 const WORKSPACES_STORAGE_KEY = 'tradethesis-charts-workspaces-v1'
 
-function readWorkspaces(): Record<string, SavedContext> {
+interface SavedWorkspace {
+  context: SavedContext
+  grid: ReturnType<ChartGrid['getWorkspace']>
+}
+
+function readWorkspaces(): Record<string, SavedWorkspace> {
   try {
     const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY)
-    return raw ? JSON.parse(raw) as Record<string, SavedContext> : {}
+    return raw ? JSON.parse(raw) as Record<string, SavedWorkspace> : {}
   } catch {
     return {}
   }
@@ -128,11 +133,13 @@ export default function App() {
   const [callHistory, setCallHistory] = useState<OptionHistoryPoint[]>([])
   const [putHistory, setPutHistory] = useState<OptionHistoryPoint[]>([])
   const [chain, setChain] = useState<OptionChainResponse | undefined>()
-  const [workspaces, setWorkspaces] = useState<Record<string, SavedContext>>(readWorkspaces)
+  const [workspaces, setWorkspaces] = useState<Record<string, SavedWorkspace>>(readWorkspaces)
+  const [gridPreset, setGridPreset] = useState<ChartGridLayoutId>('1x1')
   const [workspaceName, setWorkspaceName] = useState('')
   const [activeWorkspace, setActiveWorkspace] = useState('')
   const chartRef = useRef<HTMLDivElement | null>(null)
-  const widgetRef = useRef<ReturnType<typeof createWidget> | null>(null)
+  const gridRef = useRef<ChartGrid | null>(null)
+  const cellSubscriptions = useRef(new Map<string, Array<() => void>>())
 
   const onFeedResult = (result: FeedResult) => {
     setFeed(result)
@@ -272,114 +279,113 @@ export default function App() {
       ? initial.cryptoExchange
       : exchangeFor(initial.index, initial.mode === 'option')
 
-    const widget = createWidget(container, {
-      feed: new TradeThesisDataFeed(
-        () => contextRef.current,
-        new OptionsDashboardRealtimeProvider(
-          () => contextRef.current.date,
-          (metrics) => contextRef.current.onLiveMetrics?.(metrics),
-        ),
+    const realtimeProvider = new OptionsDashboardRealtimeProvider(
+      () => contextRef.current.date,
+      (metrics) => contextRef.current.onLiveMetrics?.(metrics),
+    )
+    const grid = createChartGrid(container, {
+      feed: ({ id }) => new TradeThesisDataFeed(
+        () => ({
+          ...contextRef.current,
+          onResult: (result) => { if (gridRef.current?.active().id === id) onFeedResult(result) },
+          onLiveStatus: (status) => { if (gridRef.current?.active().id === id) setRealtimeStatus(status) },
+          onLiveMetrics: (metrics) => { if (gridRef.current?.active().id === id) setLiveMetrics(metrics) },
+        }),
+        realtimeProvider,
       ),
       symbol: initialSymbol,
       exchange: initialExchange,
       interval: initial.interval ?? '5m',
       variant: { unit: feedScopeKey(initial) },
       intervals: ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'],
-      canSelectInterval: (code) => {
-        const active = widgetRef.current
-        const isOption = parseOptionSymbol(active?.symbol() ?? '') !== undefined
-        const exchange = active?.exchange().toUpperCase()
-        if (isOption) return code === '1m'
-        if (exchange === 'BINANCE' || exchange === 'OKX') {
-          return ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'].includes(code)
-        }
-        return ['1m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(code)
-      },
       theme: initial.theme ?? 'light',
       chartType: initial.mode === 'option' ? 'line' : 'candlestick',
+      preset: '1x1',
+      links: { crosshair: true, viewport: true },
+      toolbar: true,
+      persist: 'tradethesis-chart-grid-v1',
       rail: true,
       topbar: true,
       fullscreen: true,
-      persist: 'tradethesis-charts-v1',
       drawingScope: 'instrument',
       lookbackBars: 1200,
-      mobile: 'auto',
+      mobile: 'never',
     })
-    widgetRef.current = widget
-    const off = [
-      widget.on('symbol', ({ symbol, exchange }) => {
-        setFeed(undefined)
-        setLiveMetrics(undefined)
-        setRealtimeStatus({ state: 'disconnected' })
-        const contract = parseOptionSymbol(symbol)
-        const venue = exchange.toUpperCase()
-        if (contract) {
-          setMarket('INDEX')
-          setMode('option')
-          setIndex(contract.index)
-          setStrike(contract.strike)
-          setSide(contract.side)
-          if (contract.expiry) setExpiry(contract.expiry)
-        } else if (venue === 'BINANCE' || venue === 'OKX' || symbol === 'BTCUSDT' || symbol === 'BTC-USDT') {
-          setMarket('BTC')
-          setMode('underlying')
-          setCryptoExchange(venue === 'OKX' ? 'OKX' : 'BINANCE')
-        } else if (symbol === 'NIFTY' || symbol === 'SENSEX') {
-          setMarket('INDEX')
-          setMode('underlying')
-          setIndex(symbol)
-        }
-      }),
-      widget.on('interval', ({ interval: next }) => {
-        setFeed(undefined)
-        setInterval(next)
-      }),
-      widget.on('theme', ({ theme: next }) => setTheme(next)),
-      widget.on('data', ({ bars, error }) => {
-        if (error) setMessage(error)
-        else if (bars > 0) setMessage('Chart history loaded')
-      }),
-    ]
+    gridRef.current = grid
 
-    void widget.ready.then(() => {
-      if (widget.isDestroyed) return
-      setTheme(widget.theme())
-      setInterval(widget.interval())
-      const contract = parseOptionSymbol(widget.symbol())
+    const syncActiveContext = () => {
+      if (grid.isDestroyed) return
+      const widget = grid.active().widget
+      const symbol = widget.symbol()
+      const exchange = widget.exchange().toUpperCase()
+      const contract = parseOptionSymbol(symbol)
       if (contract) {
-        setMarket('INDEX')
-        setMode('option')
-        setIndex(contract.index)
-        setStrike(contract.strike)
-        setSide(contract.side)
+        setMarket('INDEX'); setMode('option'); setIndex(contract.index)
+        setStrike(contract.strike); setSide(contract.side)
         if (contract.expiry) setExpiry(contract.expiry)
-      } else if (widget.exchange().toUpperCase() === 'BINANCE' || widget.exchange().toUpperCase() === 'OKX') {
-        setMarket('BTC')
-        setMode('underlying')
-        setCryptoExchange(widget.exchange().toUpperCase() as CryptoExchange)
-      } else if (widget.symbol() === 'NIFTY' || widget.symbol() === 'SENSEX') {
-        setMarket('INDEX')
-        setMode('underlying')
-        setIndex(widget.symbol() as IndexName)
+      } else if (exchange === 'BINANCE' || exchange === 'OKX' || symbol === 'BTCUSDT' || symbol === 'BTC-USDT') {
+        setMarket('BTC'); setMode('underlying')
+        setCryptoExchange(exchange === 'OKX' ? 'OKX' : 'BINANCE')
+      } else if (symbol === 'NIFTY' || symbol === 'SENSEX') {
+        setMarket('INDEX'); setMode('underlying'); setIndex(symbol)
       }
       const restoredDate = dateFromVariant(widget.variant()?.unit)
       if (restoredDate) setDate(restoredDate)
-      setWidgetReady(true)
-    })
+      setInterval(widget.interval())
+      setTheme(widget.theme())
+      setLiveMetrics(undefined)
+      setFeed(undefined)
+      setRealtimeStatus({ state: 'disconnected' })
+    }
 
+    const attachCell = (cell: ReturnType<ChartGrid['cells']>[number]) => {
+      if (cellSubscriptions.current.has(cell.id)) return
+      cellSubscriptions.current.set(cell.id, [
+        cell.widget.on('symbol', () => { if (gridRef.current?.active().id === cell.id) syncActiveContext() }),
+        cell.widget.on('interval', ({ interval: next }) => { if (gridRef.current?.active().id === cell.id) setInterval(next) }),
+        cell.widget.on('theme', ({ theme: next }) => { if (gridRef.current?.active().id === cell.id) setTheme(next) }),
+        cell.widget.on('data', ({ bars, error }) => {
+          if (gridRef.current?.active().id !== cell.id) return
+          if (error) setMessage(error)
+          else if (bars > 0) setMessage('Chart history loaded')
+        }),
+      ])
+    }
+    const attachAllCells = () => {
+      const activeIds = new Set(grid.cells().map(cell => cell.id))
+      for (const [id, off] of cellSubscriptions.current) {
+        if (!activeIds.has(id)) { off.forEach(unsubscribe => unsubscribe()); cellSubscriptions.current.delete(id) }
+      }
+      grid.cells().forEach(attachCell)
+    }
+    attachAllCells()
+    const offActive = grid.on('active', () => { attachAllCells(); syncActiveContext() })
+    const offLayout = grid.on('layout', attachAllCells)
+
+    void grid.ready.then(() => {
+      if (grid.isDestroyed) return
+      attachAllCells()
+      setWidgetReady(true)
+      syncActiveContext()
+      const activePreset = grid.layout().preset
+      if (activePreset) setGridPreset(activePreset as ChartGridLayoutId)
+    })
     return () => {
-      off.forEach((unsubscribe) => unsubscribe())
-      widget.destroy()
-      if (widgetRef.current === widget) widgetRef.current = null
+      offActive(); offLayout()
+      for (const off of cellSubscriptions.current.values()) off.forEach(unsubscribe => unsubscribe())
+      cellSubscriptions.current.clear()
+      grid.destroy()
+      if (gridRef.current === grid) gridRef.current = null
     }
   }, [])
 
   useEffect(() => {
     if (!widgetReady) return
-    const widget = widgetRef.current
-    if (!widget) return
+    const grid = gridRef.current
+    if (!grid) return
+    const widget = grid.active().widget
     void widget.ready.then(() => {
-      if (widget.isDestroyed) return
+      if (grid.isDestroyed) return
       const symbol = market === 'BTC'
         ? cryptoSymbol(cryptoExchange)
         : mode === 'option'
@@ -403,9 +409,10 @@ export default function App() {
 
   useEffect(() => {
     if (!widgetReady) return
-    const widget = widgetRef.current
+    const grid = gridRef.current
+    const widget = grid?.active().widget
     if (widget) void widget.ready.then(() => {
-      if (!widget.isDestroyed && widget.theme() !== theme) widget.setTheme(theme)
+      if (!grid?.isDestroyed && widget.theme() !== theme) widget.setTheme(theme)
     })
   }, [theme, widgetReady])
 
@@ -436,14 +443,20 @@ export default function App() {
       market, mode, index, strike, side, cryptoExchange,
       date, expiry, interval, theme,
     }
-    setWorkspaces(previous => ({ ...previous, [name]: snapshot }))
+    const currentGrid = gridRef.current
+    if (!currentGrid) return
+    setWorkspaces(previous => ({ ...previous, [name]: {
+      context: snapshot,
+      grid: currentGrid.getWorkspace(),
+    } }))
     setActiveWorkspace(name)
     setWorkspaceName('')
   }
 
   function loadWorkspace(name: string) {
-    const snapshot = workspaces[name]
-    if (!snapshot) return
+    const savedWorkspace = workspaces[name]
+    if (!savedWorkspace) return
+    const snapshot = savedWorkspace.context
     setMarket(snapshot.market ?? 'INDEX')
     setMode(snapshot.mode ?? 'underlying')
     setIndex(snapshot.index ?? 'NIFTY')
@@ -454,6 +467,7 @@ export default function App() {
     setExpiry(snapshot.expiry ?? 'UNKNOWN')
     setInterval(snapshot.interval ?? '5m')
     setTheme(snapshot.theme ?? 'light')
+    gridRef.current?.applyWorkspace(savedWorkspace.grid)
     setFeed(undefined)
     setLiveMetrics(undefined)
     setRealtimeStatus({ state: 'disconnected' })
