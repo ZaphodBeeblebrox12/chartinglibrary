@@ -597,17 +597,29 @@ export default function App() {
   const latest = liveMetrics ?? feed?.latest
   const currentSymbol = market === 'BTC'
     ? cryptoSymbol(cryptoExchange)
-    : market === 'STOCK'
-      ? selectedCashInstrument
-      : mode === 'option'
-        ? optionSymbol(index, strike, side, expiry)
-        : index
+    : market === 'GLOBAL'
+      ? globalSymbol
+      : market === 'STOCK' || market === 'COMMODITY'
+        ? selectedCashInstrument
+        : mode === 'option'
+          ? optionSymbol(index, strike, side, expiry)
+          : index
   const tone = feed?.source === 'demo' ? 'warning'
     : feed?.source === 'empty' || feed?.source === 'unsupported' ? 'muted' : 'positive'
-  const today = market === 'BTC' ? todayUTC() : todayIST()
+  const today = market === 'BTC' || market === 'GLOBAL' ? todayUTC() : todayIST()
+  const visibleCashInstruments = cashInstruments.filter(item =>
+    market === 'COMMODITY' ? item.kind === 'COMMODITY' : item.kind === 'STOCK'
+  )
+  const visibleGlobalInstruments = globalInstruments.filter(item =>
+    item.type === globalType &&
+    (item.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+      item.description.toLowerCase().includes(globalSearch.toLowerCase()))
+  ).slice(0, 250)
   const providerLabel = market === 'BTC'
     ? (cryptoExchange === 'BINANCE' ? 'BINANCE SPOT' : 'OKX SPOT')
-    : market === 'STOCK' ? 'CASH DATABASE' : 'DATABASE CONNECTED'
+    : market === 'GLOBAL' ? 'BIQUOTE GLOBAL DATA'
+      : market === 'COMMODITY' ? 'MCX FUTURES DATABASE'
+        : market === 'STOCK' ? 'CASH DATABASE' : 'DATABASE CONNECTED'
 
   function chooseUnderlying(next: IndexName) {
     setMarket('INDEX')
@@ -627,16 +639,32 @@ export default function App() {
     setLiveMetrics(undefined)
   }
 
-  function chooseStock(name: string) {
+  function chooseTrackedInstrument(name: string) {
     const instrument = cashInstruments.find(item => item.name === name)
     if (!instrument) return
-    setMarket('STOCK')
+    setMarket(instrument.kind === 'COMMODITY' ? 'COMMODITY' : 'STOCK')
     setMode('underlying')
     setSelectedCashInstrument(instrument.name)
     setSelectedCashExchange(instrument.exchange)
+    setDate(todayIST())
     setInterval('5m')
     setFeed(undefined)
     setLiveMetrics(undefined)
+    setRealtimeStatus({ state: 'disconnected' })
+  }
+
+  function chooseGlobalInstrument(name: string) {
+    const instrument = globalInstruments.find(item => item.name === name)
+    if (!instrument) return
+    setMarket('GLOBAL')
+    setMode('underlying')
+    setGlobalSymbol(instrument.name)
+    setGlobalType(instrument.type)
+    setDate(todayUTC())
+    setInterval('5m')
+    setFeed(undefined)
+    setLiveMetrics(undefined)
+    setRealtimeStatus({ state: 'disconnected' })
   }
 
   function chooseCrypto(exchange: CryptoExchange = cryptoExchange) {
@@ -665,7 +693,7 @@ export default function App() {
             <span className="connection-dot" />
             {market === 'BTC'
               ? (apiState === 'connected' ? providerLabel : apiState === 'offline' ? 'EXCHANGE DATA OFFLINE' : 'CONNECTING EXCHANGE')
-              : (apiState === 'connected' ? 'DATABASE CONNECTED' : apiState === 'offline' ? 'BACKEND OFFLINE' : 'CONNECTING')}
+              : (apiState === 'connected' ? providerLabel : apiState === 'offline' ? 'DATA SOURCE OFFLINE' : 'CONNECTING')}
           </span>
           <span className="local-label">LOCAL WORKSTATION</span>
           <button className="theme-toggle" type="button" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
@@ -680,18 +708,49 @@ export default function App() {
           <div className="segmented">
             <button className={market === 'INDEX' && index === 'NIFTY' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('NIFTY')}>NIFTY</button>
             <button className={market === 'INDEX' && index === 'SENSEX' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('SENSEX')}>SENSEX</button>
-            <button className={market === 'STOCK' ? 'selected' : ''} disabled={!cashInstruments.length} onClick={() => chooseStock(selectedCashInstrument || cashInstruments[0]?.name || '')}>STOCKS</button>
+            <button className={market === 'STOCK' ? 'selected' : ''} disabled={!cashInstruments.some(item => item.kind === 'STOCK')} onClick={() => chooseTrackedInstrument(cashInstruments.find(item => item.kind === 'STOCK')?.name ?? '')}>STOCKS</button>
+            <button className={market === 'COMMODITY' ? 'selected' : ''} disabled={!cashInstruments.some(item => item.kind === 'COMMODITY')} onClick={() => chooseTrackedInstrument(cashInstruments.find(item => item.kind === 'COMMODITY')?.name ?? '')}>MCX</button>
+            <button className={market === 'GLOBAL' ? 'selected' : ''} onClick={() => chooseGlobalInstrument(globalSymbol || globalInstruments[0]?.name || '')}>GLOBAL</button>
             <button className={market === 'BTC' ? 'selected' : ''} onClick={() => chooseCrypto()}>BTC</button>
           </div>
         </div>
-        {market === 'STOCK' && <>
+        {(market === 'STOCK' || market === 'COMMODITY') && <>
           <span className="toolbar-divider" />
           <label className="toolbar-group">
-            <span className="toolbar-caption">CASH INSTRUMENT</span>
+            <span className="toolbar-caption">{market === 'COMMODITY' ? 'MCX FRONT-MONTH FUTURE' : 'CASH EQUITY'}</span>
             <select className="control-select stock-select" value={selectedCashInstrument}
-              onChange={(event) => chooseStock(event.target.value)}>
-              {cashInstruments.map(item => <option key={item.name} value={item.name}>{item.name} · {item.exchange}</option>)}
-              {!cashInstruments.length && <option value="">No tracked stocks</option>}
+              onChange={(event) => chooseTrackedInstrument(event.target.value)}>
+              {visibleCashInstruments.map(item => <option key={item.name} value={item.name}>{item.name} · {item.exchange}</option>)}
+              {!visibleCashInstruments.length && <option value="">No configured instruments</option>}
+            </select>
+          </label>
+        </>}
+        {market === 'GLOBAL' && <>
+          <span className="toolbar-divider" />
+          <label className="toolbar-group">
+            <span className="toolbar-caption">ASSET CLASS</span>
+            <select className="control-select" value={globalType}
+              onChange={(event) => {
+                const type = event.target.value as GlobalAssetType
+                setGlobalType(type)
+                const first = globalInstruments.find(item => item.type === type)
+                if (first) chooseGlobalInstrument(first.name)
+              }}>
+              <option value="Forex">Forex</option>
+              <option value="Commodity">Metals / Energy</option>
+              <option value="Crypto">Crypto</option>
+              <option value="Index">Indices</option>
+              <option value="Stock">Stocks / CFDs</option>
+            </select>
+          </label>
+          <input className="control-input global-search" value={globalSearch}
+            onChange={event => setGlobalSearch(event.target.value)} placeholder="Search symbols" />
+          <label className="toolbar-group">
+            <span className="toolbar-caption">PROVIDER SYMBOL</span>
+            <select className="control-select global-symbol-select" value={globalSymbol}
+              onChange={event => chooseGlobalInstrument(event.target.value)}>
+              {visibleGlobalInstruments.map(item => <option key={item.name} value={item.name}>{item.name} · {item.description}</option>)}
+              {!visibleGlobalInstruments.length && <option value="">No matching symbols</option>}
             </select>
           </label>
         </>}
@@ -712,9 +771,13 @@ export default function App() {
           <div className="segmented">
             {market === 'BTC'
               ? <button className="selected">Spot</button>
-              : market === 'STOCK'
-                ? <button className="selected">Cash</button>
-                : <>
+              : market === 'GLOBAL'
+                ? <button className="selected">Provider market</button>
+                : market === 'STOCK'
+                  ? <button className="selected">Cash</button>
+                  : market === 'COMMODITY'
+                    ? <button className="selected">Front-month futures</button>
+                    : <>
                   <button className={mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying(index)}>Underlying</button>
                   <button className={mode === 'option' && side === 'CE' ? 'selected call' : ''} onClick={() => chooseOption('CE')}>Call</button>
                   <button className={mode === 'option' && side === 'PE' ? 'selected put' : ''} onClick={() => chooseOption('PE')}>Put</button>
@@ -749,7 +812,7 @@ export default function App() {
         </>}
         <span className="toolbar-spacer" />
         <label className="toolbar-group">
-          <span className="toolbar-caption">{market === 'BTC' ? 'DATE (UTC)' : 'SESSION'}</span>
+          <span className="toolbar-caption">{market === 'BTC' || market === 'GLOBAL' ? 'DATE (UTC)' : 'SESSION (IST)'}</span>
           <input className="control-input" type="date" value={date} max={today} onChange={(event) => {
             setFeed(undefined)
             setLiveMetrics(undefined)
@@ -799,7 +862,7 @@ export default function App() {
         <div className={'source-indicator ' + tone}><span className="source-dot" /><strong>{feed?.label ?? 'Waiting for chart history'}</strong></div>
         <span className="status-detail">{feed?.detail ?? (market === 'BTC' ? 'Public BTC/USDT spot history and live market data' : 'Connect the local Options Dashboard API to load saved market data')}</span>
         <span className="status-spacer" />
-        <span>{market === 'BTC' ? '24/7 SPOT MARKET' : market === 'STOCK' ? `${cashInstruments.length} configured cash symbols` : `${dates.length} saved sessions`}</span>
+        <span>{market === 'BTC' ? '24/7 SPOT MARKET' : market === 'GLOBAL' ? 'GLOBAL PROVIDER FEED' : market === 'STOCK' ? `${visibleCashInstruments.length} configured cash symbols` : market === 'COMMODITY' ? `${visibleCashInstruments.length} configured MCX futures` : `${dates.length} saved sessions`}</span>
         <span className="status-divider" />
         <span className="status-live">{realtimeStatus.state === 'live' ? 'REALTIME STREAM CONNECTED' : realtimeStatus.state === 'connecting' ? 'CONNECTING LIVE STREAM' : realtimeStatus.state === 'reconnecting' ? 'RECONNECTING LIVE STREAM' : 'HISTORICAL MODE'}</span>
       </section>
@@ -807,25 +870,31 @@ export default function App() {
       <section className="workspace">
         <div className="chart-heading">
           <div>
-            <span className="eyebrow">{market === 'BTC' ? 'BITCOIN SPOT' : market === 'STOCK' ? 'INDIAN CASH EQUITY' : mode === 'option' ? 'OPTION PREMIUM' : 'INDEX SPOT'}</span>
+            <span className="eyebrow">{market === 'BTC' ? 'BITCOIN SPOT' : market === 'GLOBAL' ? 'GLOBAL INDICATIVE MARKET' : market === 'COMMODITY' ? 'MCX FRONT-MONTH FUTURES' : market === 'STOCK' ? 'INDIAN CASH EQUITY' : mode === 'option' ? 'OPTION PREMIUM' : 'INDEX SPOT'}</span>
             <h1>{market === 'BTC'
               ? 'BTC/USDT'
-              : market === 'STOCK'
-                ? selectedCashInstrument
-                : mode === 'option' ? index + ' ' + fmtInt(strike) + ' ' + side : index}
-              <small>{market === 'BTC' ? cryptoExchange : market === 'STOCK' ? selectedCashExchange : exchangeFor(index, mode === 'option')}</small>
+              : market === 'GLOBAL'
+                ? globalSymbol
+                : market === 'STOCK' || market === 'COMMODITY'
+                  ? selectedCashInstrument
+                  : mode === 'option' ? index + ' ' + fmtInt(strike) + ' ' + side : index}
+              <small>{market === 'BTC' ? cryptoExchange : market === 'GLOBAL' ? 'BIQUOTE' : market === 'STOCK' || market === 'COMMODITY' ? selectedCashExchange : exchangeFor(index, mode === 'option')}</small>
             </h1>
             <p>{market === 'BTC'
               ? 'Exchange-specific spot OHLCV · 24/7 market · no account credentials'
-              : market === 'STOCK'
-                ? 'Tick-built cash equity OHLC from the Options Dashboard streamer'
-                : mode === 'option'
-                  ? (expiry === 'UNKNOWN' ? 'Sampled LTP observations · historical expiry unknown' : 'Sampled LTP observations · expiry ' + expiry)
-                  : 'Tick-built underlying OHLC · cash volume unavailable'}</p>
+              : market === 'GLOBAL'
+                ? `Biquote ${globalType} indicative mid-price · source is not exchange-licensed or guaranteed tradable data`
+                : market === 'COMMODITY'
+                  ? 'MCX front-month futures-derived OHLC · not spot commodity prices'
+                  : market === 'STOCK'
+                    ? 'Tick-built cash equity OHLC from the Options Dashboard streamer'
+                    : mode === 'option'
+                      ? (expiry === 'UNKNOWN' ? 'Sampled LTP observations · historical expiry unknown' : 'Sampled LTP observations · expiry ' + expiry)
+                      : 'Tick-built underlying OHLC · cash volume unavailable'}</p>
           </div>
           <div className="chart-meta">
             <strong>{date}</strong>
-            <span>{market === 'BTC' ? 'UTC CANDLE SOURCE' : mode === 'option' ? '≈ 30 SEC SNAPSHOT CADENCE' : 'TICK-BUILT CANDLE SOURCE'}</span>
+            <span>{market === 'BTC' || market === 'GLOBAL' ? 'UTC CANDLE SOURCE' : mode === 'option' ? '≈ 30 SEC SNAPSHOT CADENCE' : 'TICK-BUILT CANDLE SOURCE'}</span>
           </div>
         </div>
         <div className="chart-frame">
