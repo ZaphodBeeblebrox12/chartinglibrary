@@ -2,6 +2,23 @@ export type IndexName = 'NIFTY' | 'SENSEX'
 export type OptionSide = 'CE' | 'PE'
 export type CryptoExchange = 'BINANCE' | 'OKX'
 
+export interface TrackedCashInstrument {
+  name: string
+  kind: 'STOCK' | 'COMMODITY'
+  tier: number
+  exchange: 'NSE' | 'MCX'
+}
+
+export type GlobalAssetType = 'Forex' | 'Stock' | 'Crypto' | 'Index' | 'Commodity'
+
+export interface GlobalMarketInstrument {
+  name: string
+  description: string
+  type: GlobalAssetType
+  exchange: string
+  source: string
+}
+
 export interface CryptoCandleRow {
   time: number
   open: number
@@ -57,6 +74,54 @@ export interface OptionHistoryResponse {
   }
 }
 
+export interface OptionChainStrike {
+  strike: number
+  CE: OptionChainSide | null
+  PE: OptionChainSide | null
+}
+
+export interface OptionChainSide {
+  oi?: number | null
+  oi_change?: number | null
+  oi_change_pct?: number | null
+  volume?: number | null
+  volume_valid?: boolean
+  source_age_sec?: number | null
+  ltp?: number | null
+  iv?: number | null
+  delta?: number | null
+  gamma?: number | null
+  theta?: number | null
+  vega?: number | null
+  gex?: number | null
+}
+
+export interface OptionChainResponse {
+  index_name: IndexName
+  date: string
+  expiry: string | null
+  expiry_known?: boolean
+  asof: string | null
+  spot: number | null
+  strikes: OptionChainStrike[]
+  analytics: {
+    call_wall?: number | null
+    put_wall?: number | null
+    max_pain?: number | null
+    gamma_flip?: number | null
+    max_gex_strike?: number | null
+    net_gex?: number | null
+    max_pain_source?: string | null
+  }
+  quality?: {
+    snapshot_rows?: number
+    missing_ce_pairs?: number
+    missing_pe_pairs?: number
+    legacy_expiry?: boolean
+    empty?: boolean
+  }
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',
@@ -84,12 +149,12 @@ export async function fetchAvailableDates(
 }
 
 export async function fetchUnderlyingCandles(
-  index: IndexName,
+  index: string,
   interval: string,
   date: string,
   signal?: AbortSignal,
 ): Promise<UnderlyingCandleRow[]> {
-  const apiInterval = interval === '1h' ? '1H' : interval
+  const apiInterval = ({ '1h': '1H', '4h': '4H', '1d': '1D' } as Record<string, string>)[interval] ?? interval
   const params = new URLSearchParams({
     symbol: index,
     tf: apiInterval,
@@ -180,4 +245,91 @@ export async function fetchCryptoCandles(
     signal,
   )
   return Array.isArray(payload.candles) ? payload.candles : []
+}
+
+export async function fetchOptionChain(
+  index: IndexName,
+  expiry: string,
+  date: string,
+  signal?: AbortSignal,
+): Promise<OptionChainResponse> {
+  const params = new URLSearchParams({ index, expiry, date })
+  const payload = await getJson<Partial<OptionChainResponse>>(
+    `/api/chart/options/chain?${params.toString()}`,
+    signal,
+  )
+  // Older backend instances and test doubles may not expose the chain endpoint
+  // yet. Normalize the response so analytics panels render an explicit empty
+  // state instead of crashing on a missing strikes array.
+  return {
+    index_name: payload.index_name ?? index,
+    date: payload.date ?? date,
+    expiry: payload.expiry ?? (expiry === 'UNKNOWN' ? null : expiry),
+    ...(payload.expiry_known === undefined ? {} : { expiry_known: payload.expiry_known }),
+    asof: payload.asof ?? null,
+    spot: payload.spot ?? null,
+    strikes: Array.isArray(payload.strikes) ? payload.strikes : [],
+    analytics: payload.analytics && typeof payload.analytics === 'object'
+      ? payload.analytics
+      : {},
+    ...(payload.quality ? { quality: payload.quality } : {}),
+  }
+}
+
+export async function fetchTrackedCashInstruments(
+  signal?: AbortSignal,
+): Promise<TrackedCashInstrument[]> {
+  const payload = await getJson<{
+    instruments?: Array<{ name?: string; kind?: string; tier?: number; exchange?: string }>
+  }>('/api/instruments', signal)
+  if (!Array.isArray(payload.instruments)) return []
+  return payload.instruments
+    .filter(item => item.name && ['stock', 'commodity'].includes((item.kind ?? '').toLowerCase()))
+    .map(item => {
+      const kind = String(item.kind ?? 'stock').toUpperCase() as 'STOCK' | 'COMMODITY'
+      return {
+        name: String(item.name).toUpperCase(),
+        kind,
+        tier: Number(item.tier ?? 2),
+        exchange: (kind === 'COMMODITY' ? 'MCX' : 'NSE') as 'NSE' | 'MCX',
+      }
+    })
+    .filter((item, index, all) => all.findIndex(other => other.name === item.name) === index)
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+export async function fetchGlobalMarketInstruments(
+  signal?: AbortSignal,
+): Promise<GlobalMarketInstrument[]> {
+  const response = await fetch(
+    'https://biquote.io/api/symbols?quotedWithinDays=7',
+    { headers: { Accept: 'application/json' }, signal },
+  )
+  if (!response.ok) {
+    throw new Error(`Global market catalogue returned HTTP ${response.status}`)
+  }
+  const payload = await response.json() as unknown
+  const rows = Array.isArray(payload)
+    ? payload
+    : ((payload as { symbols?: unknown[]; items?: unknown[]; data?: unknown[] })?.symbols ??
+       (payload as { items?: unknown[] })?.items ??
+       (payload as { data?: unknown[] })?.data ?? [])
+  if (!Array.isArray(rows)) return []
+  const supported = new Set<GlobalAssetType>(['Forex', 'Stock', 'Crypto', 'Index', 'Commodity'])
+  return rows.flatMap((value) => {
+    if (!value || typeof value !== 'object') return []
+    const row = value as Record<string, unknown>
+    const name = String(row.name ?? row.symbol ?? '').trim().toUpperCase()
+    const type = String(row.type ?? '').trim() as GlobalAssetType
+    if (!name || !supported.has(type)) return []
+    return [{
+      name,
+      description: String(row.description ?? name),
+      type,
+      exchange: String(row.exchange ?? row.source ?? 'Biquote'),
+      source: String(row.source ?? 'MT5'),
+    }]
+  }).filter((item, index, all) =>
+    all.findIndex(other => other.name === item.name) === index,
+  ).sort((a, b) => a.name.localeCompare(b.name))
 }

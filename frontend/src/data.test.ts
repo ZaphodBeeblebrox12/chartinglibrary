@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { OptionHistoryPoint } from './api'
 import {
+  calculateTechnicalMetrics,
   createFixtureBars,
   istTimestampToUtcSeconds,
   mapCryptoCandles,
@@ -142,5 +143,39 @@ describe('demo feed fixtures', () => {
     expect(first).toEqual(second)
     expect(first).toHaveLength(75)
     expect(first[0].time).toBe(istTimestampToUtcSeconds('2026-09-11 09:15:00'))
+  })
+})
+
+
+describe('technical indicators', () => {
+  it('calculates SMA20, EMA20 and RSI14 from ordered bar closes', () => {
+    const bars = Array.from({ length: 30 }, (_, index) => ({
+      time: 1_000 + index * 60,
+      open: index + 100,
+      high: index + 101,
+      low: index + 99,
+      close: index + 100,
+    }))
+    const metrics = calculateTechnicalMetrics(bars)
+    expect(metrics.sma20).toBe(119.5)
+    expect(metrics.ema20).toBe(119.5)
+    expect(metrics.ema20).toBeLessThan(130)
+    expect(metrics.rsi14).toBe(100)
+  })
+
+  it('does not invent moving averages or RSI without enough bars', () => {
+    const bars = Array.from({ length: 10 }, (_, index) => ({
+      time: 1_000 + index * 60,
+      open: 100, high: 101, low: 99, close: 100 + index,
+    }))
+    expect(calculateTechnicalMetrics(bars)).toEqual({})
+  })
+
+  it('returns neutral RSI for a perfectly flat sequence', () => {
+    const bars = Array.from({ length: 15 }, (_, index) => ({
+      time: 1_000 + index * 60,
+      open: 100, high: 100, low: 100, close: 100,
+    }))
+    expect(calculateTechnicalMetrics(bars).rsi14).toBe(50)
   })
 })
