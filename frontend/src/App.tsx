@@ -609,7 +609,7 @@ export default function App() {
           <div className="segmented">
             <button className={market === 'INDEX' && index === 'NIFTY' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('NIFTY')}>NIFTY</button>
             <button className={market === 'INDEX' && index === 'SENSEX' && mode === 'underlying' ? 'selected' : ''} onClick={() => chooseUnderlying('SENSEX')}>SENSEX</button>
-            <button className={market === 'STOCK' ? 'selected' : ''} onClick={() => chooseStock(selectedCashInstrument || cashInstruments[0]?.name || '')}>STOCKS</button>
+            <button className={market === 'STOCK' ? 'selected' : ''} disabled={!cashInstruments.length} onClick={() => chooseStock(selectedCashInstrument || cashInstruments[0]?.name || '')}>STOCKS</button>
             <button className={market === 'BTC' ? 'selected' : ''} onClick={() => chooseCrypto()}>BTC</button>
           </div>
         </div>
@@ -779,9 +779,7 @@ export default function App() {
             selectedSide={side}
           />
         )}
-        {market === 'INDEX' && (
-          <ChartAlertsPanel symbol={currentSymbol} metrics={latest} />
-        )}
+        <ChartAlertsPanel symbol={currentSymbol} metrics={latest} />
         <div className="chart-footnote">
           <span>TRADETHESIS CHARTING ENGINE</span>
           <span>{message}</span>
