@@ -1,218 +1,95 @@
-# TradeThesis Charts — Implementation Plan
+# TradeThesis Charts — implementation and verification status
 
-## 1. Confirmed product decisions
+Updated after merging the multi-market workstation and its companion Options Dashboard backend changes into both repositories' main branches.
 
-| Decision | Choice |
+## 1. Product and architecture decisions
+
+| Area | Decision |
 |---|---|
-| Product name | TradeThesis Charts |
-| Chart engine | OpenAlgo Charts |
-| UI framework | React + TypeScript |
-| Bundler | Vite |
-| Theme | Light and dark, user-toggleable |
-| Deployment | Local-first; no cloud deployment in this plan |
-| Initial underlyings | NIFTY and SENSEX |
-| Historical source | Existing Options Dashboard SQLite database |
-| Live source | Existing Options Dashboard backend only, after payload audit |
-| Broker connection | No additional Angel One session/WebSocket |
+| Product | TradeThesis Charts |
+| Chart engine | OpenAlgo Charts 2.7.5 |
+| UI | React + TypeScript + Vite |
+| Deployment | Local-first workstation |
+| Appearance | Light and dark themes |
+| Indian market history | Existing Options Dashboard SQLite and FastAPI API |
+| Indian market realtime | Existing Options Dashboard /ws broadcast |
+| Crypto | Public Binance and OKX BTC/USDT spot endpoints |
+| Global markets | Biquote public indicative market-data API and SignalR |
+| Broker connectivity | No second Angel One login or WebSocket |
+| Order execution | Not supported |
 
-The charting application is standalone. It must not be mounted inside the Options Dashboard frontend or require that frontend to be open. It may use the existing Options Dashboard backend as a local data service.
+Charts is an independent frontend. It can use the Options Dashboard backend as a local data service without being embedded in or replacing the existing dashboard frontend.
 
-## 2. What the existing backend already provides
+## 2. Implemented feature set
 
-The inspected Options Dashboard repository is a Python/FastAPI + SQLite WAL backend with a React/Vite frontend.
+### Chart workstation
+- Chart grid layouts from 1x1 to 3x2.
+- Linked crosshairs and viewport synchronization.
+- Saved grid state and named workspaces/context.
+- Light/dark themes, chart toolbar, drawing rail and fullscreen.
+- Drawing favorites and catalogue, magnet settings, undo/redo, eraser, object list, selection/grouping, visibility, locking and deletion.
 
-Relevant existing functionality:
+### Indian markets
+- Historical NIFTY/SENSEX underlying candles reuse the existing tick-built one-minute candle store and /api/scanner/candles.
+- The Options Dashboard backend broadcasts persisted one-minute cash/index candles to existing /ws clients after the database writer commits.
+- Configured cash equities and configured MCX front-month FUTCOM instruments are available through the instrument catalogue and backend candle builder.
+- MCX candles use symbol/session-aware handling and are explicitly presented as futures, not commodity spot.
 
-- `GET /api/current?index=NIFTY|SENSEX` returns the latest index snapshot and option chain.
-- `GET /api/history/{strike}?date=YYYY-MM-DD&index=NIFTY|SENSEX` returns timestamped CE/PE observations for a strike, including LTP, OI, OI change, volume, IV, Delta, Gamma, Theta, Vega and GEX.
-- `GET /api/snapshots` and `GET /api/snapshot/{timestamp}` support snapshot navigation/replay.
-- `GET /api/available-dates` exposes dates containing saved data.
-- `/ws` is the existing live-state WebSocket; its exact event cadence and payload should be verified before using it for chart updates.
-- **Underlying OHLC already exists:** `candles_1m` stores genuine tick-built one-minute CASH/spot candles. In `streamer_integration.py`, the NIFTY/SENSEX spot-tick handler calls `candle_feed.on_tick(self.index_name, message)`. The separate stock streamer also forwards CASH ticks for STOCK instruments. `candle_builder.py` constructs OHLC from incoming ticks using the Angel exchange timestamp when valid. The existing `GET /api/scanner/candles?symbol=NIFTY|SENSEX&tf=5m|15m|30m|1H&date=YYYY-MM-DD` derives higher timeframes from those saved 1m rows.
-- **Option premium OHLC does not currently exist:** the option tick handlers update the in-memory option state, and the snapshot engine persists LTP/OI/IV/Greeks approximately every 30 seconds in `option_snapshots`. Those option ticks are not passed to `CandleBuilder`; there is no per-option `candles_1m` table.
+### Options data and analytics
+- Date- and expiry-scoped option expiry, strike and LTP-history APIs.
+- A nullable snapshot expiry migration supports correct identity for new captures. Earlier records remain expiry-unknown; no expiry is inferred for legacy rows.
+- Historical CE/PE premiums are sampled observations, not tick-complete exchange OHLC.
+- The chart presents one-minute bars grouped from the approximately 30-second snapshot samples, with freshness/gap metadata.
+- The backend exposes a read-only selected-date/expiry option-chain endpoint with CE/PE chain rows, OI walls and saved max-pain/gamma-flip/GEX levels. Max pain is estimated from OI only where the stored snapshot does not contain it, and the UI identifies that caveat.
+- The UI includes OI profile, CE/PE comparison, historical spot/premium/OI/OI-change/IV/Greeks/GEX sparklines, current option metrics and live option updates.
 
-Therefore, TradeThesis Charts can use the existing true tick-built OHLC for NIFTY and SENSEX underlying charts immediately. Selected CE/PE premium charts initially use the stored snapshot time series (line view by default); snapshot-derived candles, if offered, must be labelled as sampled bars. No second broker feed is needed.
+### Global and crypto markets
+- Binance and OKX BTC/USDT historical REST candles and public live candle streams remain separate venue-specific series.
+- Biquote symbol catalogue, indicative historical OHLC and SignalR live candle subscription are implemented for supported asset classes. This feed is not guaranteed executable pricing; volume is provider tick volume.
+- Selected historical sessions do not retain a live subscription.
 
-## 3. Critical data-model issue: expiry identity
+### Analysis and alerts
+- SMA20, EMA20 and RSI14 are calculated from actual loaded/live bar closes.
+- Local persistent alert rules support price/spot, technical metrics and option metrics, with optional browser notifications after permission is granted.
+- Alerts are browser-local and depend on the workstation being open and receiving new data; they are not a server-side always-on alert service.
 
-The current schema has:
+## 3. Data provenance rules
 
-- `snapshots(timestamp, index_name, spot, futures, ...)`
-- `option_snapshots(snapshot_id, index_name, strike, option_type, ltp, oi, volume, iv, delta, gamma, theta, vega, gex, ...)`
+The following distinctions are intentional and must remain visible in future changes:
 
-The capture pipeline resolves the active expiry into `expiry_key` (`ek`) before analytics, but `_write_snapshot_to_db` does not persist that value. Consequently, the historical option rows do not independently identify the expiry contract.
+1. **Tick-built candles:** underlying index/cash and configured MCX instrument candles are built from the ticks received by the existing Options Dashboard backend and stored by its candle writer.
+2. **Sampled option observations:** option snapshots are captured about every 30 seconds. Aggregated option bars only describe observed samples; they do not claim the full market high/low between captures.
+3. **Legacy option expiry:** older snapshots without expiry remain in the explicit unknown-expiry series. Never backfill expiry from a current instrument master.
+4. **Crypto:** spot data/volume are tied to the selected exchange; Binance and OKX prices and volumes are not merged.
+5. **Biquote:** the feed is indicative, provider-specific data. Forex/CFD volume is tick volume, and historical availability is rolling.
+6. **Missing/stale data:** do not replace gaps or stale samples with synthetic flat prices. Report unavailable/disconnected/stale status instead.
 
-### Required forward-compatible fix
+## 4. Repositories and merged changes
 
-Before treating historical option records as exact contract history:
+- **ZaphodBeeblebrox12/Options-Dashboard:** PR #40 merged to main — chart live feeds, option-chain analytics and MCX candles. Its PR CI passed backend compile/unit tests, frontend typecheck/build, and replay/freshness regression tests.
+- **ZaphodBeeblebrox12/chartinglibrary:** PR #7 merged to main — multi-market chart workstation, realtime providers, analytics, drawing manager and alert UI. Its PR CI passed TypeScript, unit tests, production build and all five Playwright browser smoke tests.
+- A browser smoke-test fixture was corrected to provide the new option-chain API response; the frontend now also normalizes a missing/empty chain into a safe empty state.
 
-1. Add a nullable `expiry` column to `snapshots`.
-2. Put the resolved expiry key into the captured snapshot payload.
-3. Persist it with the parent snapshot row in the same DB transaction.
-4. Include expiry in the history query and chart API response.
-5. Add an index only if query plans/volume justify it.
-6. Preserve old rows as `expiry = NULL`; do not infer expiry from today's instrument master.
-7. When expiry is unknown, label that series as legacy/unknown and prevent it being merged into an expiry-specific series.
+CI validates code and mocked/test-data paths. The copied local SQLite database, actual Windows workstation, local backend-to-frontend websocket and real public exchange/provider network connections still require hands-on local verification.
 
-The parent snapshot is the appropriate place for expiry because each NIFTY/SENSEX snapshot represents one active option-chain expiry for that capture. An option row inherits that expiry through `snapshot_id`.
+## 5. Local integration gates still outstanding
 
-This is a small, backward-compatible migration in the Options Dashboard backend. It does not require changing its frontend or broker streamer.
+These cannot be certified from GitHub Actions alone:
 
-## 4. Snapshot-derived chart data: honest semantics
+- Confirm the backend opens the intended copied SQLite database via TRADETHESIS_DB_PATH.
+- Confirm the expiry migration is present and legacy rows stay unknown.
+- Compare NIFTY/SENSEX sessions, timeframes and option history against the actual database.
+- Confirm the existing backend /ws broadcasts committed candles and fresh option state into the chart without another Angel One session.
+- Confirm configured cash/MCX tick subscriptions are active and have data.
+- Confirm Binance, OKX and Biquote historical/live connectivity from the user's network/browser.
+- Exercise grid layouts, saved workspaces, drawing tools, alerts and browser-notification permission in the local browser.
 
-The database stores sampled points approximately every 30 seconds. It does not store every option trade or true per-contract tick OHLC.
+The full sequence is in [LOCAL_TEST_PLAN.md](LOCAL_TEST_PLAN.md).
 
-Initial chart behavior:
+## 6. Local run target
 
-- Keep every recorded LTP observation as a timestamped point.
-- Use a line chart as the most truthful default for option premium history.
-- Where the chart experience requires candles, aggregate the observed LTP samples into **snapshot-derived bars** and label them as such.
-- The observed high/low in a derived bar means the highest/lowest captured sample, not necessarily the true exchange high/low.
-- Do not synthesize observations during missing intervals. Preserve gaps.
-- Derive volume increments from consecutive cumulative-volume readings only when both readings are valid and belong to the same date/contract. Treat resets, invalid readings and negative deltas as unknown rather than zero.
-- OI, IV and Greeks are sampled time-series; they are not OHLC values.
-- Underlying spot is also available in the parent snapshot table and can be plotted as an observed series.
+- Options Dashboard API: http://127.0.0.1:8000
+- TradeThesis Charts: http://127.0.0.1:5173
+- Shared database path example: C:/Projects/chartinglibrary/nifty_snapshots.db
 
-A future tick-recorder or historical broker candle source could improve candle fidelity, but it is deliberately outside the first release.
-
-## 5. Delivery phases
-
-### Phase 0 — Data contract and compatibility audit
-
-**Status:** Implemented on `feat/charts-expiry-history-api`; CI pending
-
-- Reuse `candles_1m` and `/api/scanner/candles` for NIFTY/SENSEX underlying OHLC; no duplicate candle builder.
-- Add nullable `snapshots.expiry` persistence from the already-resolved `expiry_key`.
-- Add `GET /api/chart/options/expiries` and `GET /api/chart/options/history` for expiry-aware date-scoped history.
-- Keep legacy rows at `expiry IS NULL`; select them only via the explicit `UNKNOWN` series.
-- Add database migration and snapshot-writer tests. Broader endpoint/API checks still need CI validation.
-- The existing WebSocket payload has not yet been approved as a stable chart-stream contract; the chart app therefore remains historical-only until a realtime provider is implemented.
-
-**Remaining before phase exit:** run the Options Dashboard backend test suite in CI and verify existing production DB migration on a backup/copy before restarting the live backend.
-
-### Phase 1 — Chart engine prototype
-
-**Status:** Frontend implemented; build and browser checks pending
-
-- React + TypeScript + Vite application scaffolded.
-- OpenAlgo Charts pinned to 2.7.5; widget, drawing rail and indicator registry imported.
-- Light/dark theme toggle and widget state persistence configured.
-- Deterministic fixture data is used only when the local API is unavailable and is labelled as demo data.
-- Chart lifecycle cleanup is implemented for React Strict Mode.
-- Resize, fullscreen, keyboard shortcuts and chart interactions still require CI/browser verification.
-
-**Remaining before phase exit:** pass TypeScript, unit, production build and manual browser checks.
-
-### Phase 2 — Historical database adapter
-
-**Status:** Core history adapter implemented; analytics panes pending
-
-- Implement `TradeThesisDataFeed` using the OpenAlgo `DataFeed` interface.
-- Add NIFTY/SENSEX, underlying/call/put, strike, expiry and session-date selectors.
-- Load existing tick-built underlying candles through `/api/scanner/candles`.
-- Load exact-expiry option LTP samples through `/api/chart/options/history`; legacy `UNKNOWN` is isolated.
-- Use a line chart for option premiums and show the approximately 30-second capture cadence.
-- Map valid cumulative volume into deltas without inventing values across invalid/reset samples.
-- Show latest OI/IV/Greeks in a compact metrics strip; dedicated synchronized indicator panes and advanced date-range pagination remain future work.
-
-**Remaining before phase exit:** pass CI and verify data against the user's local Options Dashboard database for both indices, both sides and legacy/exact-expiry sessions.
-
-### Future realtime provider requirement
-
-Historical REST and live streaming are separate integration points, not mutually exclusive operating modes. The frontend's custom feed now has an optional `RealtimeProvider` contract that maps to OpenAlgo's `subscribeBars`. The initial delivery leaves this provider unconfigured; the UI reports historical mode honestly.
-
-When Angel One live is added, implement it behind the Options Dashboard/backend boundary (or another explicitly approved local gateway), keep broker credentials server-side, aggregate exchange ticks into the selected interval, and merge new bars onto the historical series. Reuse the existing SmartAPI session where possible; do not add duplicate subscriptions just because Charts is a separate browser application. Keep reconnect, missed-event resync, session rollover and option-expiry identity tests in the acceptance suite.
-
-### Phase 3 — Live snapshot updates
-
-- Reuse the existing backend's read-only live state or snapshot notification path.
-- Update the active series without reloading the full chart.
-- Handle reconnects, stale data, missed snapshots and contract rollovers.
-- Keep historical loading and live updates consistent.
-- Do not add an independent Angel One socket.
-
-**Exit criteria:** an open chart receives new stored observations while the Options Dashboard backend is running, and clearly indicates stale/disconnected state.
-
-### Phase 4 — TradingView-style workstation polish
-
-- Instrument search and recent contracts.
-- Timeframe and chart-type menus.
-- Drawing favorites, magnet, lock/hide, undo/redo and object manager.
-- Indicator templates and settings.
-- Workspace/layout save and restore.
-- Multiple synchronized charts.
-- Screenshot/export and keyboard shortcuts.
-- Light/dark theme refinements.
-
-**Exit criteria:** persistent technical-analysis workflow that is comfortable for daily use.
-
-### Phase 5 — TradeThesis options tools
-
-- OI and change-in-OI panels.
-- IV, Delta, Gamma, Theta and Vega history.
-- CE/PE comparison.
-- Underlying vs selected option premium.
-- Existing OI walls and other support/resistance overlays.
-- Custom TradeThesis indicators and alerts after the base chart is stable.
-
-**Exit criteria:** options-specific analytical features integrated without compromising ordinary chart behavior.
-
-## 6. Proposed repository structure
-
-```text
-chartinglibrary/
-├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   ├── components/
-│   │   ├── chart/
-│   │   │   ├── engine/
-│   │   │   ├── datafeed/
-│   │   │   ├── instruments/
-│   │   │   ├── overlays/
-│   │   │   └── workspace/
-│   │   ├── options/
-│   │   ├── api/
-│   │   ├── hooks/
-│   │   └── styles/
-│   └── tests/
-├── docs/
-│   ├── IMPLEMENTATION_PLAN.md
-│   ├── ARCHITECTURE.md
-│   └── DATA_CONTRACTS.md
-├── fixtures/
-├── scripts/
-├── README.md
-└── .gitignore
-```
-
-Do not copy the Options Dashboard backend into this repository. The first local application should proxy requests to the existing FastAPI service. Add a small local adapter service only if the existing backend cannot safely expose the required read-only contract API.
-
-## 7. Local developer workflow target
-
-- Options Dashboard backend: `http://127.0.0.1:8000` (existing service).
-- TradeThesis Charts frontend: `http://127.0.0.1:5173` (new service).
-- Vite proxies `/api` and the chart data WebSocket path to the existing backend as required.
-- Secrets remain in the Options Dashboard backend's existing environment; never copy broker keys/JWTs into the chart frontend.
-- The chart application should start and render fixture data even when the backend is offline.
-
-## 8. Acceptance gates
-
-1. **Isolation:** starting/stopping Charts does not start/stop or alter the Options Dashboard.
-2. **Data correctness:** exact expiry/strike/side identity; unknown legacy expiry never silently merged.
-3. **Data provenance:** underlying candles are identified as tick-built OHLC; option premiums from snapshots are identified as sampled observations or snapshot-derived bars.
-4. **No duplicate brokerage feed:** Charts does not log into Angel One or open a new broker WebSocket.
-5. **Resilience:** stale/missing samples create gaps/status, not fabricated flat prices.
-6. **Persistence:** saved chart drawings/layouts restore after restart.
-7. **Themes:** light and dark both work across chart canvas and widget controls.
-8. **Dual index:** NIFTY and SENSEX are both selectable and independently charted.
-9. **Tests:** unit tests for mapping/aggregation and browser tests for chart lifecycle, theme switching and saved state.
-
-## 9. Out of scope until explicitly requested
-
-- Cloud/Render deployment.
-- User accounts or public multi-user access.
-- Order execution.
-- A new Angel One market-data session.
-- Reconstructing historical exact-expiry labels where the source database never stored them.
-- Treating 30-second observations as tick-perfect exchange candles.
+Start the backend first, then run npm ci and npm run dev from the chart repository root. Keep broker credentials in the backend environment; never place them in frontend environment variables or source files.
