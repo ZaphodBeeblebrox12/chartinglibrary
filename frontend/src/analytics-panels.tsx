@@ -76,7 +76,8 @@ function Level({ label, value, kind }: { label: string; value: number | null | u
 }
 
 function OiProfile({ chain, selectedStrike }: { chain: OptionChainResponse; selectedStrike: number }) {
-  const rows = chain.strikes.filter(row => (number(row.CE?.oi) ?? 0) + (number(row.PE?.oi) ?? 0) > 0)
+  const rows = (Array.isArray(chain.strikes) ? chain.strikes : [])
+    .filter(row => (number(row.CE?.oi) ?? 0) + (number(row.PE?.oi) ?? 0) > 0)
   const maximum = Math.max(1, ...rows.flatMap(row => [number(row.CE?.oi) ?? 0, number(row.PE?.oi) ?? 0]))
   const visible = rows.slice().sort((a, b) => Math.abs(a.strike - selectedStrike) - Math.abs(b.strike - selectedStrike)).slice(0, 17).sort((a, b) => a.strike - b.strike)
   if (!visible.length) return <div className="analytics-empty">No open-interest rows in the selected chain snapshot.</div>
