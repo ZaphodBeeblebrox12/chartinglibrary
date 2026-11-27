@@ -42,6 +42,7 @@ export interface FeedContext {
   theme: 'light' | 'dark'
   onResult: (result: FeedResult) => void
   onLiveStatus?: (status: RealtimeStatus) => void
+  onLiveMetrics?: (metrics: OptionMetrics) => void
 }
 
 export function feedScopeKey(context: FeedContext): string {
@@ -58,9 +59,7 @@ function dateFromScope(value: string | undefined, fallback: string): string {
   return candidate && /^\d{4}-\d{2}-\d{2}$/.test(candidate) ? candidate : fallback
 }
 
-type Interval = '5m' | '15m' | '30m' | '1h'
-
-const UNDERLYING_INTERVALS: ReadonlySet<string> = new Set(['5m', '15m', '30m', '1h'])
+const UNDERLYING_INTERVALS: ReadonlySet<string> = new Set(['1m', '5m', '15m', '30m', '1h', '4h', '1d'])
 const CRYPTO_INTERVALS: ReadonlySet<string> = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'])
 
 function exchangeForIndex(index: IndexName, option: boolean): string {
@@ -138,7 +137,7 @@ export class TradeThesisDataFeed implements DataFeed {
         source: 'unsupported',
         connection: 'unknown',
         label: 'Timeframe not available',
-        detail: 'The existing dashboard stores underlying candles at 5m, 15m, 30m and 1h for this chart API.',
+        detail: 'The Options Dashboard candle store supports 1m, 5m, 15m, 30m, 1h, 4h and 1d.',
         barCount: 0,
       })
       return []
@@ -188,7 +187,7 @@ export class TradeThesisDataFeed implements DataFeed {
 
       const rows = await fetchUnderlyingCandles(
         index,
-        request.interval as Interval,
+        request.interval,
         selectedDate,
         request.signal,
       )
