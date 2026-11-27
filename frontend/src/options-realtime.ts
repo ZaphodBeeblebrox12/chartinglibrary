@@ -106,7 +106,10 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
     onBar: (bar: Bar, meta?: LiveBarMeta) => void,
     onStatus: (next: RealtimeStatus) => void,
   ): UnsubscribeFn {
-    const selectedDate = this.getSelectedDate()
+    const variantDate = request.variant?.unit?.split('|', 1)[0]
+    const selectedDate = variantDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(variantDate)
+      ? variantDate
+      : this.getSelectedDate()
     if (request.signal?.aborted) return () => undefined
     if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate)) {
       status(onStatus, 'disconnected', 'Invalid selected session date')
@@ -123,10 +126,14 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
 
     const exchange = request.exchange.toUpperCase()
     const option = parseOptionSymbol(request.symbol)
-    const index = option?.index ?? request.symbol.toUpperCase()
+    const instrument = option?.index ?? request.symbol.trim().toUpperCase()
     const isOption = option !== undefined || exchange === 'NFO' || exchange === 'BFO'
-    if (!['NIFTY', 'SENSEX'].includes(index)) {
-      status(onStatus, 'disconnected', 'No live Indian-market adapter for this instrument')
+    if (isOption && !['NIFTY', 'SENSEX'].includes(instrument)) {
+      status(onStatus, 'disconnected', 'Live option streaming is currently available for NIFTY and SENSEX only')
+      return () => undefined
+    }
+    if (!isOption && !['NSE', 'BSE'].includes(exchange)) {
+      status(onStatus, 'disconnected', 'No live cash-candle stream for this exchange')
       return () => undefined
     }
     if (isOption && (!option || option.expiry === 'UNKNOWN')) {
@@ -193,7 +200,7 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
         if (message.type === 'chart_candle') {
           if (isOption) return
           const candle = (message as LiveCandleEvent).data
-          if (!candle || candle.symbol?.toUpperCase() !== index || !candle.ts_minute) return
+          if (!candle || candle.symbol?.toUpperCase() !== instrument || !candle.ts_minute) return
           if (!candle.ts_minute.startsWith(selectedDate)) return
           const bucket = bucketStart(candle.ts_minute, request.interval)
           if (!bucket) return
@@ -222,7 +229,8 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
 
         if (message.type !== 'tick') return
         const data = (message as LiveIndexState).data
-        if (!data || data.index_name !== index) return
+        const stateInstrument = String(data?.index_name ?? data?.symbol ?? '').toUpperCase()
+        if (!data || stateInstrument !== instrument) return
 
         if (isOption) {
           if (data.expiry !== option?.expiry) return
