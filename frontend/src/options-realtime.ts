@@ -12,6 +12,7 @@ type LiveIndexState = {
   type?: string
   data?: {
     index_name?: string
+    symbol?: string
     expiry?: string | null
     spot?: number | null
     timestamp?: string
@@ -247,7 +248,7 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
         if (!data || stateInstrument !== instrument) return
 
         if (isOption) {
-          if (data.expiry !== option?.expiry) return
+          if (!option || data.expiry !== option.expiry) return
           const optionAge = finite(data.option_age_sec)
           if (optionAge !== undefined && optionAge > 90) {
             status(onStatus, 'reconnecting', `Option feed is stale (${Math.round(optionAge)}s)`)
