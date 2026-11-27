@@ -4,14 +4,22 @@ import 'openalgo-charts/indicators'
 import {
   fetchAvailableDates,
   fetchAvailableExpiries,
+  fetchOptionChain,
+  fetchOptionHistory,
   fetchStrikesForDate,
   type CryptoExchange,
   type IndexName,
+  type OptionChainResponse,
+  type OptionHistoryPoint,
   type OptionSide,
 } from './api'
 import { feedScopeKey, TradeThesisDataFeed, type FeedContext, type FeedResult } from './feed'
 import { optionSymbol, parseOptionSymbol } from './data'
 import type { RealtimeStatus } from './realtime'
+import { OptionsDashboardRealtimeProvider } from './options-realtime'
+import { OptionAnalyticsPanel } from './analytics-panels'
+import { ChartAlertsPanel } from './chart-alerts'
+import type { OptionMetrics } from './data'
 
 type Mode = 'underlying' | 'option'
 type Theme = 'light' | 'dark'
@@ -31,6 +39,16 @@ interface SavedContext {
 }
 
 const CONTEXT_STORAGE_KEY = 'tradethesis-charts-context-v1'
+const WORKSPACES_STORAGE_KEY = 'tradethesis-charts-workspaces-v1'
+
+function readWorkspaces(): Record<string, SavedContext> {
+  try {
+    const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY)
+    return raw ? JSON.parse(raw) as Record<string, SavedContext> : {}
+  } catch {
+    return {}
+  }
+}
 
 function readSavedContext(): SavedContext {
   try {
@@ -106,6 +124,13 @@ export default function App() {
   const [feed, setFeed] = useState<FeedResult | undefined>()
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>({ state: 'disconnected' })
   const [message, setMessage] = useState('Checking local data service')
+  const [liveMetrics, setLiveMetrics] = useState<OptionMetrics | undefined>()
+  const [callHistory, setCallHistory] = useState<OptionHistoryPoint[]>([])
+  const [putHistory, setPutHistory] = useState<OptionHistoryPoint[]>([])
+  const [chain, setChain] = useState<OptionChainResponse | undefined>()
+  const [workspaces, setWorkspaces] = useState<Record<string, SavedContext>>(readWorkspaces)
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [activeWorkspace, setActiveWorkspace] = useState('')
   const chartRef = useRef<HTMLDivElement | null>(null)
   const widgetRef = useRef<ReturnType<typeof createWidget> | null>(null)
 
@@ -128,6 +153,7 @@ export default function App() {
     theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
+    onLiveMetrics: setLiveMetrics,
   })
   contextRef.current = {
     market,
@@ -142,6 +168,7 @@ export default function App() {
     theme,
     onResult: onFeedResult,
     onLiveStatus: setRealtimeStatus,
+    onLiveMetrics: setLiveMetrics,
   }
 
   useEffect(() => {
@@ -218,7 +245,13 @@ export default function App() {
       : exchangeFor(initial.index, initial.mode === 'option')
 
     const widget = createWidget(container, {
-      feed: new TradeThesisDataFeed(() => contextRef.current),
+      feed: new TradeThesisDataFeed(
+        () => contextRef.current,
+        new OptionsDashboardRealtimeProvider(
+          () => contextRef.current.date,
+          (metrics) => contextRef.current.onLiveMetrics?.(metrics),
+        ),
+      ),
       symbol: initialSymbol,
       exchange: initialExchange,
       interval: initial.interval ?? '5m',
@@ -232,7 +265,7 @@ export default function App() {
         if (exchange === 'BINANCE' || exchange === 'OKX') {
           return ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d'].includes(code)
         }
-        return ['5m', '15m', '30m', '1h'].includes(code)
+        return ['1m', '5m', '15m', '30m', '1h', '4h', '1d'].includes(code)
       },
       theme: initial.theme ?? 'light',
       chartType: initial.mode === 'option' ? 'line' : 'candlestick',
