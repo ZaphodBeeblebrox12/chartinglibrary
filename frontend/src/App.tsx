@@ -285,7 +285,7 @@ export default function App() {
   }, [market, index, cryptoExchange, cashInstruments.length, globalInstruments.length])
 
   useEffect(() => {
-    if (market !== 'INDEX' || mode !== 'option') return
+    if (market !== 'INDEX') return
     const controller = new AbortController()
     fetchAvailableExpiries(index, date, controller.signal).then((available) => {
       if (controller.signal.aborted) return
@@ -302,7 +302,7 @@ export default function App() {
       setExpiry('UNKNOWN')
     })
     return () => controller.abort()
-  }, [market, mode, index, date])
+  }, [market, index, date])
 
   useEffect(() => {
     if (market !== 'INDEX' || mode !== 'option') return
@@ -320,7 +320,7 @@ export default function App() {
   }, [market, mode, index, date, expiry])
 
   useEffect(() => {
-    if (market !== 'INDEX' || mode !== 'option') {
+    if (market !== 'INDEX') {
       setCallHistory([])
       setPutHistory([])
       setChain(undefined)
@@ -328,11 +328,16 @@ export default function App() {
     }
     const controller = new AbortController()
     setChain(undefined)
+    const histories = mode === 'option'
+      ? Promise.all([
+          fetchOptionHistory(index, strike, 'CE', expiry, date, controller.signal),
+          fetchOptionHistory(index, strike, 'PE', expiry, date, controller.signal),
+        ])
+      : Promise.resolve([{ points: [] }, { points: [] }] as const)
     Promise.all([
-      fetchOptionHistory(index, strike, 'CE', expiry, date, controller.signal),
-      fetchOptionHistory(index, strike, 'PE', expiry, date, controller.signal),
+      histories,
       fetchOptionChain(index, expiry, date, controller.signal),
-    ]).then(([ce, pe, chainResult]) => {
+    ]).then(([[ce, pe], chainResult]) => {
       if (controller.signal.aborted) return
       setCallHistory(ce.points)
       setPutHistory(pe.points)
@@ -936,13 +941,14 @@ export default function App() {
           <Metric label="THETA" value={fmt(latest?.theta, 3)} />
           <Metric label="VEGA" value={fmt(latest?.vega, 3)} />
         </div>}
-        {market === 'INDEX' && mode === 'option' && (
+        {market === 'INDEX' && (
           <OptionAnalyticsPanel
             callHistory={callHistory}
             putHistory={putHistory}
             chain={chain}
             selectedStrike={strike}
             selectedSide={side}
+            showContractHistory={mode === 'option'}
           />
         )}
         <ChartAlertsPanel symbol={currentSymbol} metrics={latest} />
