@@ -8,7 +8,10 @@ import {
   fetchOptionHistory,
   fetchStrikesForDate,
   fetchTrackedCashInstruments,
+  fetchGlobalMarketInstruments,
   type TrackedCashInstrument,
+  type GlobalAssetType,
+  type GlobalMarketInstrument,
   type CryptoExchange,
   type IndexName,
   type OptionChainResponse,
@@ -25,7 +28,7 @@ import type { OptionMetrics } from './data'
 
 type Mode = 'underlying' | 'option'
 type Theme = 'light' | 'dark'
-type Market = 'INDEX' | 'STOCK' | 'BTC'
+type Market = 'INDEX' | 'STOCK' | 'COMMODITY' | 'GLOBAL' | 'BTC'
 
 interface SavedContext {
   market?: Market
@@ -36,6 +39,8 @@ interface SavedContext {
   cryptoExchange?: CryptoExchange
   selectedCashInstrument?: string
   selectedCashExchange?: string
+  globalSymbol?: string
+  globalType?: GlobalAssetType
   date?: string
   expiry?: string
   interval?: string
@@ -47,13 +52,20 @@ const WORKSPACES_STORAGE_KEY = 'tradethesis-charts-workspaces-v1'
 
 interface SavedWorkspace {
   context: SavedContext
-  grid: ReturnType<ChartGrid['getWorkspace']>
+  grid?: ReturnType<ChartGrid['getWorkspace']>
 }
 
 function readWorkspaces(): Record<string, SavedWorkspace> {
   try {
     const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY)
-    return raw ? JSON.parse(raw) as Record<string, SavedWorkspace> : {}
+    const parsed = raw ? JSON.parse(raw) as Record<string, SavedContext | SavedWorkspace> : {}
+    return Object.fromEntries(Object.entries(parsed).map(([name, value]) => {
+      // Migrate the earlier context-only workspace format without dropping it.
+      if (value && typeof value === 'object' && 'context' in value) {
+        return [name, value as SavedWorkspace]
+      }
+      return [name, { context: value as SavedContext }]
+    }))
   } catch {
     return {}
   }
@@ -124,7 +136,11 @@ export default function App() {
   const [cashInstruments, setCashInstruments] = useState<TrackedCashInstrument[]>([])
   const [selectedCashInstrument, setSelectedCashInstrument] = useState(saved.selectedCashInstrument ?? '')
   const [selectedCashExchange, setSelectedCashExchange] = useState(saved.selectedCashExchange ?? 'NSE')
-  const [date, setDate] = useState(saved.date ?? (saved.market === 'BTC' ? todayUTC() : todayIST()))
+  const [globalInstruments, setGlobalInstruments] = useState<GlobalMarketInstrument[]>([])
+  const [globalSymbol, setGlobalSymbol] = useState(saved.globalSymbol ?? 'EURUSD')
+  const [globalType, setGlobalType] = useState<GlobalAssetType>(saved.globalType ?? 'Forex')
+  const [globalSearch, setGlobalSearch] = useState('')
+  const [date, setDate] = useState(saved.date ?? (saved.market === 'BTC' || saved.market === 'GLOBAL' ? todayUTC() : todayIST()))
   const [expiry, setExpiry] = useState(saved.expiry ?? 'UNKNOWN')
   const [expiryChoices, setExpiryChoices] = useState<string[]>(['UNKNOWN'])
   const [interval, setInterval] = useState(saved.interval ?? '5m')
