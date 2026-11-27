@@ -343,7 +343,10 @@ export default function App() {
           fetchOptionHistory(index, strike, 'CE', expiry, date, controller.signal),
           fetchOptionHistory(index, strike, 'PE', expiry, date, controller.signal),
         ])
-      : Promise.resolve([{ points: [] }, { points: [] }] as const)
+      : Promise.resolve([
+          { points: [] as OptionHistoryPoint[] },
+          { points: [] as OptionHistoryPoint[] },
+        ])
     Promise.all([
       histories,
       fetchOptionChain(index, expiry, date, controller.signal),
@@ -605,7 +608,7 @@ export default function App() {
         paneIndex: 0,
         points: [{ time: now, price: level.value }],
         style: { color: level.color, lineWidth: 1.5, lineStyle: 'dashed', showLabels: true },
-        text: { value: level.label, color: level.color, position: 'right' },
+        text: { value: level.label, color: level.color, position: 'outside', align: 'right' },
         policy: { editable: false, persistent: false, listed: false },
       })
     }
