@@ -19,7 +19,53 @@ export interface OptionMetrics {
   vega?: number
   gex?: number
   sourceAgeSec?: number
+  sma20?: number
+  ema20?: number
+  rsi14?: number
   timestamp: string
+}
+
+export interface TechnicalMetrics {
+  sma20?: number
+  ema20?: number
+  rsi14?: number
+}
+
+/**
+ * Computes chart-native 20-bar SMA/EMA and 14-bar RSI from actual OHLC closes.
+ * Bar counts depend on the selected interval; no wall-clock duration is implied.
+ */
+export function calculateTechnicalMetrics(bars: readonly Bar[]): TechnicalMetrics {
+  const closes = bars
+    .map(bar => Number(bar.close))
+    .filter(value => Number.isFinite(value))
+  if (!closes.length) return {}
+
+  const result: TechnicalMetrics = {}
+  if (closes.length >= 20) {
+    const last20 = closes.slice(-20)
+    result.sma20 = last20.reduce((sum, value) => sum + value, 0) / 20
+    const k = 2 / 21
+    let ema = closes.slice(0, 20).reduce((sum, value) => sum + value, 0) / 20
+    for (const close of closes.slice(20)) ema = close * k + ema * (1 - k)
+    result.ema20 = ema
+  }
+
+  if (closes.length >= 15) {
+    let gains = 0
+    let losses = 0
+    for (let i = closes.length - 14; i < closes.length; i += 1) {
+      const change = closes[i] - closes[i - 1]
+      if (change > 0) gains += change
+      else losses -= change
+    }
+    const averageGain = gains / 14
+    const averageLoss = losses / 14
+    result.rsi14 = averageLoss === 0
+      ? averageGain === 0 ? 50 : 100
+      : 100 - (100 / (1 + averageGain / averageLoss))
+  }
+  return result
 }
 
 export interface OptionBarsResult {
