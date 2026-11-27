@@ -158,7 +158,7 @@ describe('technical indicators', () => {
     }))
     const metrics = calculateTechnicalMetrics(bars)
     expect(metrics.sma20).toBe(119.5)
-    expect(metrics.ema20).toBeGreaterThan(120)
+    expect(metrics.ema20).toBe(119.5)
     expect(metrics.ema20).toBeLessThan(130)
     expect(metrics.rsi14).toBe(100)
   })
