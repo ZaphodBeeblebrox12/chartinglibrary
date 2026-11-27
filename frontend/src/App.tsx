@@ -7,6 +7,8 @@ import {
   fetchOptionChain,
   fetchOptionHistory,
   fetchStrikesForDate,
+  fetchTrackedCashInstruments,
+  type TrackedCashInstrument,
   type CryptoExchange,
   type IndexName,
   type OptionChainResponse,
@@ -23,7 +25,7 @@ import type { OptionMetrics } from './data'
 
 type Mode = 'underlying' | 'option'
 type Theme = 'light' | 'dark'
-type Market = 'INDEX' | 'BTC'
+type Market = 'INDEX' | 'STOCK' | 'BTC'
 
 interface SavedContext {
   market?: Market
@@ -32,6 +34,8 @@ interface SavedContext {
   strike?: number
   side?: OptionSide
   cryptoExchange?: CryptoExchange
+  selectedCashInstrument?: string
+  selectedCashExchange?: string
   date?: string
   expiry?: string
   interval?: string
@@ -117,6 +121,9 @@ export default function App() {
   const [strike, setStrike] = useState(saved.strike ?? 25000)
   const [side, setSide] = useState<OptionSide>(saved.side ?? 'CE')
   const [cryptoExchange, setCryptoExchange] = useState<CryptoExchange>(saved.cryptoExchange ?? 'BINANCE')
+  const [cashInstruments, setCashInstruments] = useState<TrackedCashInstrument[]>([])
+  const [selectedCashInstrument, setSelectedCashInstrument] = useState(saved.selectedCashInstrument ?? '')
+  const [selectedCashExchange, setSelectedCashExchange] = useState(saved.selectedCashExchange ?? 'NSE')
   const [date, setDate] = useState(saved.date ?? (saved.market === 'BTC' ? todayUTC() : todayIST()))
   const [expiry, setExpiry] = useState(saved.expiry ?? 'UNKNOWN')
   const [expiryChoices, setExpiryChoices] = useState<string[]>(['UNKNOWN'])
@@ -151,6 +158,9 @@ export default function App() {
     market,
     mode,
     cryptoExchange,
+    selectedCashInstrument,
+    selectedCashExchange,
+    cashInstruments,
     index,
     strike,
     side,
@@ -179,7 +189,21 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (market === 'BTC') {
+    const controller = new AbortController()
+    fetchTrackedCashInstruments(controller.signal).then(items => {
+      if (!controller.signal.aborted) {
+        setCashInstruments(items)
+        setSelectedCashInstrument(current => current || items[0]?.name || '')
+        setSelectedCashExchange(current => current || items[0]?.exchange || 'NSE')
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted) setCashInstruments([])
+    })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (market === 'BTC' || market === 'STOCK') {
       setDates([])
       setApiState('checking')
       setMessage(`Connecting to ${cryptoExchange} public BTC/USDT market data`)
@@ -272,12 +296,16 @@ export default function App() {
     const initial = contextRef.current
     const initialSymbol = initial.market === 'BTC'
       ? cryptoSymbol(initial.cryptoExchange)
-      : initial.mode === 'option'
+      : initial.market === 'STOCK'
+        ? initial.selectedCashInstrument
+        : initial.mode === 'option'
         ? optionSymbol(initial.index, initial.strike, initial.side, initial.expiry)
         : initial.index
     const initialExchange = initial.market === 'BTC'
       ? initial.cryptoExchange
-      : exchangeFor(initial.index, initial.mode === 'option')
+      : initial.market === 'STOCK'
+        ? initial.selectedCashExchange
+        : exchangeFor(initial.index, initial.mode === 'option')
 
     const grid = createChartGrid(container, {
       feed: ({ id }) => new TradeThesisDataFeed(
@@ -329,6 +357,10 @@ export default function App() {
         setCryptoExchange(exchange === 'OKX' ? 'OKX' : 'BINANCE')
       } else if (symbol === 'NIFTY' || symbol === 'SENSEX') {
         setMarket('INDEX'); setMode('underlying'); setIndex(symbol)
+      } else if (['NSE', 'BSE'].includes(exchange)) {
+        setMarket('STOCK'); setMode('underlying')
+        setSelectedCashInstrument(symbol)
+        setSelectedCashExchange(exchange)
       }
       const restoredDate = dateFromVariant(widget.variant()?.unit)
       if (restoredDate) setDate(restoredDate)
@@ -389,12 +421,16 @@ export default function App() {
       if (grid.isDestroyed) return
       const symbol = market === 'BTC'
         ? cryptoSymbol(cryptoExchange)
-        : mode === 'option'
-          ? optionSymbol(index, strike, side, expiry)
-          : index
+        : market === 'STOCK'
+          ? selectedCashInstrument
+          : mode === 'option'
+            ? optionSymbol(index, strike, side, expiry)
+            : index
       const exchange = market === 'BTC'
         ? cryptoExchange
-        : exchangeFor(index, mode === 'option')
+        : market === 'STOCK'
+          ? selectedCashExchange
+          : exchangeFor(index, mode === 'option')
       const symbolChanged = widget.symbol() !== symbol || widget.exchange() !== exchange
       const intervalChanged = widget.interval() !== interval
       if (symbolChanged) widget.setSymbol(symbol, exchange)
@@ -406,7 +442,7 @@ export default function App() {
     }).catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : 'Unable to update chart')
     })
-  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, date, expiry, interval])
+  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval])
 
   useEffect(() => {
     if (!widgetReady) return
@@ -420,14 +456,14 @@ export default function App() {
   useEffect(() => {
     if (!widgetReady) return
     const stored: SavedContext = {
-      market, mode, index, strike, side, cryptoExchange, date, expiry, interval, theme,
+      market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval, theme,
     }
     try {
       window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify(stored))
     } catch {
       setMessage('Browser storage is unavailable; current session preferences will not persist')
     }
-  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, date, expiry, interval, theme])
+  }, [widgetReady, market, mode, index, strike, side, cryptoExchange, selectedCashInstrument, selectedCashExchange, date, expiry, interval, theme])
 
   useEffect(() => {
     try {
@@ -442,6 +478,7 @@ export default function App() {
     if (!name) return
     const snapshot: SavedContext = {
       market, mode, index, strike, side, cryptoExchange,
+      selectedCashInstrument, selectedCashExchange,
       date, expiry, interval, theme,
     }
     const currentGrid = gridRef.current
@@ -464,6 +501,8 @@ export default function App() {
     setStrike(snapshot.strike ?? 25000)
     setSide(snapshot.side ?? 'CE')
     setCryptoExchange(snapshot.cryptoExchange ?? 'BINANCE')
+    setSelectedCashInstrument(snapshot.selectedCashInstrument ?? cashInstruments[0]?.name ?? '')
+    setSelectedCashExchange(snapshot.selectedCashExchange ?? 'NSE')
     setDate(snapshot.date ?? todayIST())
     setExpiry(snapshot.expiry ?? 'UNKNOWN')
     setInterval(snapshot.interval ?? '5m')
@@ -478,9 +517,11 @@ export default function App() {
   const latest = liveMetrics ?? feed?.latest
   const currentSymbol = market === 'BTC'
     ? cryptoSymbol(cryptoExchange)
-    : mode === 'option'
-      ? optionSymbol(index, strike, side, expiry)
-      : index
+    : market === 'STOCK'
+      ? selectedCashInstrument
+      : mode === 'option'
+        ? optionSymbol(index, strike, side, expiry)
+        : index
   const tone = feed?.source === 'demo' ? 'warning'
     : feed?.source === 'empty' || feed?.source === 'unsupported' ? 'muted' : 'positive'
   const today = market === 'BTC' ? todayUTC() : todayIST()
@@ -502,6 +543,18 @@ export default function App() {
     setMode('option')
     setSide(nextSide)
     setInterval('1m')
+    setFeed(undefined)
+    setLiveMetrics(undefined)
+  }
+
+  function chooseStock(name: string) {
+    const instrument = cashInstruments.find(item => item.name === name)
+    if (!instrument) return
+    setMarket('STOCK')
+    setMode('underlying')
+    setSelectedCashInstrument(instrument.name)
+    setSelectedCashExchange(instrument.exchange)
+    setInterval('5m')
     setFeed(undefined)
     setLiveMetrics(undefined)
   }
