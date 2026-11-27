@@ -6,6 +6,7 @@ import {
   fetchUnderlyingCandles,
   type CryptoExchange,
   type IndexName,
+  type TrackedCashInstrument,
 } from './api'
 import {
   createFixtureBars,
@@ -30,7 +31,10 @@ export interface FeedResult {
 }
 
 export interface FeedContext {
-  market: 'INDEX' | 'BTC'
+  market: 'INDEX' | 'STOCK' | 'BTC'
+  selectedCashInstrument: string
+  selectedCashExchange: string
+  cashInstruments?: TrackedCashInstrument[]
   mode: 'underlying' | 'option'
   cryptoExchange: CryptoExchange
   index: IndexName
@@ -48,9 +52,11 @@ export interface FeedContext {
 export function feedScopeKey(context: FeedContext): string {
   const instrumentScope = context.market === 'BTC'
     ? `BTC-${context.cryptoExchange}`
-    : context.mode === 'option'
-      ? `OPTION-${context.expiry}`
-      : 'INDEX'
+    : context.market === 'STOCK'
+      ? `CASH-${context.selectedCashExchange}-${context.selectedCashInstrument}`
+      : context.mode === 'option'
+        ? `OPTION-${context.expiry}`
+        : 'INDEX'
   return `${context.date}|${instrumentScope}`
 }
 
@@ -113,7 +119,11 @@ export class TradeThesisDataFeed implements DataFeed {
     const context = this.getContext()
     const selectedDate = dateFromScope(request.variant?.unit, context.date)
     const option = parseOptionSymbol(request.symbol)
-    const index = option?.index ?? (request.symbol.toUpperCase() === 'SENSEX' ? 'SENSEX' : context.index)
+    const requestSymbol = request.symbol.trim().toUpperCase()
+    const index = option?.index ?? (
+      requestSymbol === 'SENSEX' ? 'SENSEX' :
+      requestSymbol === 'NIFTY' ? 'NIFTY' : context.index
+    )
     const strike = option?.strike ?? context.strike
     const side = option?.side ?? context.side
     const exchange = request.exchange.toUpperCase()
@@ -197,10 +207,10 @@ export class TradeThesisDataFeed implements DataFeed {
       context.onResult({
         source: bars.length ? 'database-underlying' : 'empty',
         connection: 'connected',
-        label: bars.length ? 'Saved underlying candles' : 'No saved candles',
+        label: bars.length ? 'Saved cash candles' : 'No saved cash candles',
         detail: bars.length
-          ? 'Tick-built underlying OHLC · volume is not supplied for the index cash feed'
-          : `No ${index} candles were found for ${selectedDate} at ${request.interval}.`,
+          ? `Tick-built ${requestSymbol} OHLC · volume is not supplied by this cash feed`
+          : `No ${requestSymbol} candles were found for ${selectedDate} at ${request.interval}.`,
         barCount: bars.length,
       })
       return bars
@@ -218,7 +228,7 @@ export class TradeThesisDataFeed implements DataFeed {
         return []
       }
       const bars = createFixtureBars(
-        isOption ? optionSymbol(index, strike, side) : index,
+        isOption ? optionSymbol(index, strike, side, selectedExpiry) : request.symbol,
         request.interval,
         selectedDate,
         isOption,
@@ -243,6 +253,12 @@ export class TradeThesisDataFeed implements DataFeed {
       { symbol: 'SENSEX', exchange: 'BSE', name: 'BSE SENSEX', assetClass: 'Index' },
       { symbol: 'BTCUSDT', exchange: 'BINANCE', name: 'BTC/USDT · Binance Spot', assetClass: 'Crypto' },
       { symbol: 'BTC-USDT', exchange: 'OKX', name: 'BTC/USDT · OKX Spot', assetClass: 'Crypto' },
+      ...(context.cashInstruments ?? []).map(item => ({
+        symbol: item.name,
+        exchange: item.exchange,
+        name: `${item.name} · ${item.exchange} Cash`,
+        assetClass: 'Stock',
+      })),
     ]
     const optionChoices: SymbolMatch[] = [
       {
