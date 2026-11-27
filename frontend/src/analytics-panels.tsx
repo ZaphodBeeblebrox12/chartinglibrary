@@ -4,7 +4,7 @@ import type {
   OptionSide,
 } from './api'
 
-type MetricKey = 'oi' | 'oi_change' | 'iv' | 'delta' | 'gamma' | 'theta' | 'vega' | 'gex' | 'ltp'
+type MetricKey = 'spot' | 'oi' | 'oi_change' | 'iv' | 'delta' | 'gamma' | 'theta' | 'vega' | 'gex' | 'ltp'
 
 function number(value: unknown): number | undefined {
   if (value === null || value === undefined || value === '') return undefined
@@ -121,12 +121,14 @@ export function OptionAnalyticsPanel({
   chain,
   selectedStrike,
   selectedSide,
+  showContractHistory = true,
 }: {
   callHistory: OptionHistoryPoint[]
   putHistory: OptionHistoryPoint[]
   chain?: OptionChainResponse
   selectedStrike: number
   selectedSide: OptionSide
+  showContractHistory?: boolean
 }) {
   const call = callHistory.at(-1)
   const put = putHistory.at(-1)
@@ -156,26 +158,31 @@ export function OptionAnalyticsPanel({
         </div>
         <div className="analytics-panel">
           <div className="analytics-panel-head"><strong>CE / PE comparison</strong><span>Latest saved observation</span></div>
-          <div className="side-comparison">
-            <SideSummary label="CALL" row={call} side="CE" />
-            <SideSummary label="PUT" row={put} side="PE" />
+          {showContractHistory ? (
+            <div className="side-comparison">
+              <SideSummary label="CALL" row={call} side="CE" />
+              <SideSummary label="PUT" row={put} side="PE" />
+            </div>
+          ) : <div className="analytics-empty">Choose a Call or Put series to view contract-level historical metrics.</div>}
+        </div>
+      </div>
+      {showContractHistory && (
+        <div className="analytics-panel history-panel">
+          <div className="analytics-panel-head"><strong>{selectedSide} historical metrics · {fmtInt(selectedStrike)}</strong><span>Approximately 30-second saved samples</span></div>
+          <div className="analytics-spark-grid">
+            <Sparkline title="UNDERLYING SPOT" rows={rows} field="spot" />
+            <Sparkline title="PREMIUM" rows={rows} field="ltp" />
+            <Sparkline title="OPEN INTEREST" rows={rows} field="oi" digits={0} />
+            <Sparkline title="OI CHANGE" rows={rows} field="oi_change" digits={0} />
+            <Sparkline title="IMPLIED VOLATILITY" rows={rows} field="iv" />
+            <Sparkline title="DELTA" rows={rows} field="delta" digits={3} />
+            <Sparkline title="GAMMA" rows={rows} field="gamma" digits={5} />
+            <Sparkline title="THETA" rows={rows} field="theta" digits={3} />
+            <Sparkline title="VEGA" rows={rows} field="vega" digits={3} />
+            <Sparkline title="GAMMA EXPOSURE" rows={rows} field="gex" digits={0} />
           </div>
         </div>
-      </div>
-      <div className="analytics-panel history-panel">
-        <div className="analytics-panel-head"><strong>{selectedSide} historical metrics · {fmtInt(selectedStrike)}</strong><span>Approximately 30-second saved samples</span></div>
-        <div className="analytics-spark-grid">
-          <Sparkline title="PREMIUM" rows={rows} field="ltp" />
-          <Sparkline title="OPEN INTEREST" rows={rows} field="oi" digits={0} />
-          <Sparkline title="OI CHANGE" rows={rows} field="oi_change" digits={0} />
-          <Sparkline title="IMPLIED VOLATILITY" rows={rows} field="iv" />
-          <Sparkline title="DELTA" rows={rows} field="delta" digits={3} />
-          <Sparkline title="GAMMA" rows={rows} field="gamma" digits={5} />
-          <Sparkline title="THETA" rows={rows} field="theta" digits={3} />
-          <Sparkline title="VEGA" rows={rows} field="vega" digits={3} />
-          <Sparkline title="GAMMA EXPOSURE" rows={rows} field="gex" digits={0} />
-        </div>
-      </div>
+      )}
     </section>
   )
 }
