@@ -57,6 +57,54 @@ export interface OptionHistoryResponse {
   }
 }
 
+export interface OptionChainStrike {
+  strike: number
+  CE: OptionChainSide | null
+  PE: OptionChainSide | null
+}
+
+export interface OptionChainSide {
+  oi?: number | null
+  oi_change?: number | null
+  oi_change_pct?: number | null
+  volume?: number | null
+  volume_valid?: boolean
+  source_age_sec?: number | null
+  ltp?: number | null
+  iv?: number | null
+  delta?: number | null
+  gamma?: number | null
+  theta?: number | null
+  vega?: number | null
+  gex?: number | null
+}
+
+export interface OptionChainResponse {
+  index_name: IndexName
+  date: string
+  expiry: string | null
+  expiry_known?: boolean
+  asof: string | null
+  spot: number | null
+  strikes: OptionChainStrike[]
+  analytics: {
+    call_wall?: number | null
+    put_wall?: number | null
+    max_pain?: number | null
+    gamma_flip?: number | null
+    max_gex_strike?: number | null
+    net_gex?: number | null
+    max_pain_source?: string | null
+  }
+  quality?: {
+    snapshot_rows?: number
+    missing_ce_pairs?: number
+    missing_pe_pairs?: number
+    legacy_expiry?: boolean
+    empty?: boolean
+  }
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method: 'GET',
@@ -89,7 +137,7 @@ export async function fetchUnderlyingCandles(
   date: string,
   signal?: AbortSignal,
 ): Promise<UnderlyingCandleRow[]> {
-  const apiInterval = interval === '1h' ? '1H' : interval
+  const apiInterval = ({ '1h': '1H', '4h': '4H', '1d': '1D' } as Record<string, string>)[interval] ?? interval
   const params = new URLSearchParams({
     symbol: index,
     tf: apiInterval,
@@ -180,4 +228,17 @@ export async function fetchCryptoCandles(
     signal,
   )
   return Array.isArray(payload.candles) ? payload.candles : []
+}
+
+export async function fetchOptionChain(
+  index: IndexName,
+  expiry: string,
+  date: string,
+  signal?: AbortSignal,
+): Promise<OptionChainResponse> {
+  const params = new URLSearchParams({ index, expiry, date })
+  return getJson<OptionChainResponse>(
+    `/api/chart/options/chain?${params.toString()}`,
+    signal,
+  )
 }
