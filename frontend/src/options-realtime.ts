@@ -122,11 +122,11 @@ export class OptionsDashboardRealtimeProvider implements RealtimeProvider {
     onStatus: (next: RealtimeStatus) => void,
   ): UnsubscribeFn {
     const variantDate = request.variant?.unit?.split('|', 1)[0]
-    const selectedDate = variantDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(variantDate)
+    const selectedDate = variantDate && /^\d{4}-\d{2}-\d{2}$/.test(variantDate)
       ? variantDate
       : this.getSelectedDate()
     if (request.signal?.aborted) return () => undefined
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
       status(onStatus, 'disconnected', 'Invalid selected session date')
       return () => undefined
     }
