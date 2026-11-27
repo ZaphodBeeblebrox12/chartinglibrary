@@ -242,6 +242,11 @@ export class TradeThesisDataFeed implements DataFeed {
             ? `Public ${exchange} spot OHLCV · UTC timestamps · ${bars.length} candles`
             : `No ${exchange} BTC/USDT observations were returned for ${selectedDate} UTC.`,
           barCount: bars.length,
+          latest: bars.length ? {
+            timestamp: new Date(bars[bars.length - 1].time * 1000).toISOString(),
+            ltp: bars[bars.length - 1].close,
+            ...calculateTechnicalMetrics(bars),
+          } : undefined,
         })
         return bars
       }
